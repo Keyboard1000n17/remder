@@ -22,7 +22,7 @@ const getOpts = async () => {
       }),
     );
     console.log(
-      await figlet.text("< > ? ; : { } \ | [ ] , .", {
+      await figlet.text("< > / ? ; : { } \ | [ ] , .", {
         font: font,
       }),
     );

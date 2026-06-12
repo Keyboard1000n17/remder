@@ -22,11 +22,24 @@ _hopin..._
 
 ~~that this will work~~ ~but can't be all too sure~
 
-> blockquotes will be here
-> to test edge cases i guess
+> blockquotes will be here to test edge cases i guess
 
 > and this should be separate from the previous blockquote according to gfm spec
+
+> > hopefully this nested thing works too
 
 ---
 
 the above is supposed to be a thematic break
+
+# This
+
+## should
+
+render as a setext heading.
+
+# And
+
+`this should be some code`
+
+`` this should work as well, i hope ` ``

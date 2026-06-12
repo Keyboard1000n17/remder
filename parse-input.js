@@ -3,24 +3,27 @@ export default async function parse(input) {
   const toBeParsed = input.replaceAll("\u0000", "\ufffd");
   let index = 0;
   while (index < toBeParsed.length) {
-    // block=level
+    // block-level
     const remainingText = toBeParsed.slice(index);
-    const afxHeading = remainingText.match(/^(#+) ([^\n]*)/);
-    const setextHeadingLevel1 = remainingText.match(/^(.*)\n={3,}/);
-    const setextHeadingLevel2 = remainingText.match(/^(.*)\n-{3,}/);
+    const afxHeading = remainingText.match(/^(#+) ([^\n]+)/);
+    const setextHeadingLevel1 = remainingText.match(/^(^\n)\n={3,}/);
+    const setextHeadingLevel2 = remainingText.match(/^(^\n)\n-{3,}/);
     const comment = remainingText.match(/^<!--.*-->/s);
     const codeBlock = remainingText.match(/^(```(.*)```)/s);
-    const blockquote = remainingText.match(/^(\s{0,3}[^>]+)((>+)|(> )+)\s*([^\n]*)/);
+    const blockquote = remainingText.match(/^( {0,3})((?:>\s*)+)([^\n]*)/);
+    const hr = remainingText.match(/^\n---\n/);
 
     // inline
     const bold = remainingText.match(/^\*\*([^\*]*)\*\*/);
     const underline = remainingText.match(/^__([^_]*)__/);
-    const italic = remainingText.match(/^[\*_]([^\*_]*)[\_*]/);
-    const strikethrough = remainingText.match(/^(~{1,2})([^~]*)\1$/);
+    const italic = remainingText.match(/^([\*_])([^\*_]*)\1/);
+    const strikethrough = remainingText.match(/^(~{1,2})([^~]*)\1/);
+    const list = remainingText.match(/^([\*-])([^\*-]*)/);
     const image = remainingText.match(/^!\[([^\]]*)\]\(.*\)/);
     const link = remainingText.match(/^\[([^\]]*)\]\(.*\)/);
-    const code = remainingText.match(/^(`{1,2})([^`]*)\1$/);
-    const plainText = remainingText.match(/^[^\*!_~`\[\]]+/);
+    const code = remainingText.match(/^(`{1,2})([^`]*)\1/);
+    const plainText = remainingText.match(/^[^\n\*-=<>!_~`\[\]]+/);
+    const newline = remainingText.match(/^\n+/);
 
     if (afxHeading) {
       tokens.push({ type: "afx-heading", text: afxHeading });
@@ -38,7 +41,9 @@ export default async function parse(input) {
       });
       index += setextHeadingLevel2[0].length;
     } else if (comment) {
-      // this will work! it's not supposed to push comments, that's just unnecessary
+      index += comment[0].length;
+    } else if (newline) {
+      index += newline[0].length;
     } else if (bold) {
       tokens.push({ type: "bold", text: bold });
       index += bold[0].length;
@@ -54,6 +59,9 @@ export default async function parse(input) {
     } else if (blockquote) {
       tokens.push({ type: "blockquote", text: blockquote });
       index += blockquote[0].length;
+    } else if (list) {
+      tokens.push({ type: "list-item", text: list });
+      index += list[0];
     } else if (image) {
       tokens.push({ type: "image", text: image });
       index += image[0].length;
@@ -64,8 +72,8 @@ export default async function parse(input) {
       tokens.push({ type: "plain-text", text: plainText });
       index += plainText[0].length;
     } else {
-      throw new Error("YO DEV FIX YO DAMN CODE");
       console.log(`text for reference\n\n${toBeParsed}`);
+      throw new Error("YO DEV FIX YO DAMN CODE");
     }
   }
   return tokens;

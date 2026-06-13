@@ -6,75 +6,88 @@ export default async function parse(input) {
     // block-level
     const remainingText = toBeParsed.slice(index);
     const afxHeading = remainingText.match(/^(#+) ([^\n]+)/);
-    const setextHeadingLevel1 = remainingText.match(/^(^\n)\n={3,}/);
-    const setextHeadingLevel2 = remainingText.match(/^(^\n)\n-{3,}/);
+    const htmlHeading = remainingText.match(/^<(h[123456])>(.*?)<\/\1>/);
+    const setextHeadingLevel1 = remainingText.match(/^([^\n]+)\n={3,}/);
+    const setextHeadingLevel2 = remainingText.match(/^([^\n]+)\n-{3,}/);
     const comment = remainingText.match(/^<!--.*-->/s);
     const codeBlock = remainingText.match(/^(```(.*)```)/s);
     const blockquote = remainingText.match(/^( {0,3})((?:>\s*)+)([^\n]*)/);
-    const hr = remainingText.match(/^\n---\n/);
+    const hr = remainingText.match(/^---\n/);
 
     // inline
-    const bold = remainingText.match(/^\*\*([^\*]*)\*\*/);
+    const bold = remainingText.match(/^\*\*([^\*]+)\*\*/);
     const underline = remainingText.match(/^__([^_]*)__/);
     const italic = remainingText.match(/^([\*_])([^\*_]*)\1/);
     const strikethrough = remainingText.match(/^(~{1,2})([^~]*)\1/);
-    const list = remainingText.match(/^([\*-])([^\*-]*)/);
+    const list = remainingText.match(/^(\s*)[\*-]\s([^\n\*\->!_~`\[\]]+)/);
     const image = remainingText.match(/^!\[([^\]]*)\]\(.*\)/);
     const link = remainingText.match(/^\[([^\]]*)\]\(.*\)/);
-    const code = remainingText.match(/^(`{1,2})([^`]*)\1/);
-    const plainText = remainingText.match(/^[^\n\*-=<>!_~`\[\]]+/);
+    const code = remainingText.match(/^(`{1,2})(.*?)\1/);
+    const plainText = remainingText.match(/^[^\n\*\->!_~`\[\]]+/);
     const newline = remainingText.match(/^\n+/);
 
+    let textType;
+    let content;
+
     if (afxHeading) {
-      tokens.push({ type: "afx-heading", text: afxHeading });
-      index += afxHeading[0].length;
+      textType = "afx-heading";
+      content = afxHeading;
     } else if (setextHeadingLevel1) {
-      tokens.push({
-        type: "setext-leading-level-1",
-        text: setextHeadingLevel1,
-      });
-      index += setextHeadingLevel1[0].length;
+      textType = "setext-leading-level-1";
+      content = setextHeadingLevel1;
     } else if (setextHeadingLevel2) {
-      tokens.push({
-        type: "setext-leading-level-2",
-        text: setextHeadingLevel2,
-      });
-      index += setextHeadingLevel2[0].length;
+      textType = "setext-leading-level-2";
+      content = setextHeadingLevel2;
     } else if (comment) {
-      index += comment[0].length;
+      textType = "comment";
+      content = comment;
+    } else if (codeBlock) {
+      textType = "codeBlock";
+      content = codeBlock;
     } else if (newline) {
-      index += newline[0].length;
+      textType = "newline";
+      content = newline;
     } else if (bold) {
-      tokens.push({ type: "bold", text: bold });
-      index += bold[0].length;
+      textType = "bold";
+      content = bold;
     } else if (underline) {
-      tokens.push({ type: "underline", text: underline });
-      index += underline[0].length;
+      textType = "underline";
+      content = underline;
     } else if (italic) {
-      tokens.push({ type: "italic", text: italic });
-      index += italic[0].length;
+      textType = "italic";
+      content = italic;
     } else if (strikethrough) {
-      tokens.push({ type: "strikethrough", text: strikethrough });
-      index += strikethrough[0].length;
+      textType = "strikethrough";
+      content = strikethrough;
     } else if (blockquote) {
-      tokens.push({ type: "blockquote", text: blockquote });
-      index += blockquote[0].length;
+      textType = "blockquote";
+      content = "blockquote";
+    } else if (hr) {
+      textType = "hr";
+      content = hr;
     } else if (list) {
-      tokens.push({ type: "list-item", text: list });
-      index += list[0];
+      textType = "list";
+      content = list;
     } else if (image) {
-      tokens.push({ type: "image", text: image });
-      index += image[0].length;
+      textType = "image";
+      content = image;
     } else if (link) {
-      tokens.push({ type: "link", text: link });
-      index += link[0].length;
+      textType = "link";
+      content = link;
+    } else if (code) {
+      textType = "code";
+      content = code;
     } else if (plainText) {
-      tokens.push({ type: "plain-text", text: plainText });
-      index += plainText[0].length;
+      textType = "plain-text";
+      content = plainText;
     } else {
-      console.log(`text for reference\n\n${toBeParsed}`);
+      console.log(`text for reference\n\n${remainingText}`);
+      console.log("index", index);
+      console.log(JSON.stringify(remainingText.slice(0, 50)));
       throw new Error("YO DEV FIX YO DAMN CODE");
     }
+    tokens.push({ type: textType, text: content });
+    index += content[0].length;
   }
   return tokens;
 }

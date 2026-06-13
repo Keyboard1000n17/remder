@@ -1,45 +1,40 @@
-# Test
+# Level 1 afx heading
 
-Lorem ipsum dolor sit amet
+## Level 2 afx heading
 
-- si adipiscing elit
-- si adipiscing elit 2
-  - should work right
-    - at least, i hope so
+Level 1 setext heading
+======================
 
-1. ne bla whatever
-2. something and blabber
-3. another thing
-4. one more thing...
+Level 2 setext heading
+----------------------
 
-<!--comment should not display!-->
+Paragraph
 
-## Subheading
+- bulleted list item 1
+- bulleted list item 2
 
-**Should render fine** _but it's quite early for this_ _so we gotta wait_
+1. numbered list item 1
+2. numbered list item 2
 
-_hopin..._
+> blockquote
+> should be part of the same
+>> nested blockquote
 
-~~that this will work~~ ~but can't be all too sure~
-
-> blockquotes will be here to test edge cases i guess
-
-> and this should be separate from the previous blockquote according to gfm spec
-
-> > hopefully this nested thing works too
+<!--comment shouldn't get rendered-->
 
 ---
 
-the above is supposed to be a thematic break
+`inline code`
 
-# This
+```
+block of code go kaboom
+```
 
-## should
+**bold talk**
+_the pizzeria said mamma mia when i asked for pineapple pizza_
+__there should be a line under this__
+***bold AND italic?!***
+~~don't look here there was never anything here~~
 
-render as a setext heading.
-
-# And
-
-`this should be some code`
-
-`` this should work as well, i hope ` ``
+here's a link to my [repo](https://github.com/Keyboard1000n17/remder)
+![alt text](https://github.com/Keyboard1000n17/OSPedia/tree/master/assets/global/OSPedia-logo.svg)

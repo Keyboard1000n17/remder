@@ -11,8 +11,15 @@ export default async function parse(input) {
     const setextHeadingLevel2 = remainingText.match(/^([^\n]+)\n-{3,}/);
     const comment = remainingText.match(/^<!--.*-->/s);
     const codeBlock = remainingText.match(/^(```(.*)```)/s);
+    const htmlCodeBlock = remainingText.match(
+      /^<pre><code>(.*?)<\/pre><\/code>/,
+    );
     const blockquote = remainingText.match(/^( {0,3})((?:>\s*)+)([^\n]*)/);
+    const htmlBlockquote = remainingText.match(
+      /^<blockquote>(.*?)<\/blockquote>/,
+    );
     const hr = remainingText.match(/^---\n/);
+    const htmlHr = remainingText.match(/(<\/hr>)/);
 
     // inline
     const bold = remainingText.match(/^\*\*([^\*]+)\*\*/);
@@ -20,6 +27,10 @@ export default async function parse(input) {
     const italic = remainingText.match(/^([\*_])([^\*_]*)\1/);
     const strikethrough = remainingText.match(/^(~{1,2})([^~]*)\1/);
     const list = remainingText.match(/^(\s*)[\*-]\s([^\n\*\->!_~`\[\]]+)/);
+    const htmlList = remainingText.match(/^<ul>(<li>.*?<\/li>)+<\/ul>/);
+    const numberedList = remainingText.match(
+      /^(\s*)(\d+)\. ([^\n\*\->!_~`\[\]])/,
+    );
     const image = remainingText.match(/^!\[([^\]]*)\]\(.*\)/);
     const link = remainingText.match(/^\[([^\]]*)\]\(.*\)/);
     const code = remainingText.match(/^(`{1,2})(.*?)\1/);

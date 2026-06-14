@@ -38,3 +38,70 @@ __there should be a line under this__
 
 here's a link to my [repo](https://github.com/Keyboard1000n17/remder)
 ![alt text](https://github.com/Keyboard1000n17/OSPedia/tree/master/assets/global/OSPedia-logo.svg)
+
+
+terrible|table
+:--|--:
+that can \|hopefully|be parsed
+
+|  good   |      table     |
+|---------|----------------|
+|that can | hopefully parse|
+
+<h2>HTML Section</h2>
+
+<p>to test html parsing capabilities</p>
+
+<ul>
+  <li>bullet list item 1</li>
+  <li>bullet list item 2</li>
+</ul>
+
+<ol>
+  <li>numbered list item 1</li>
+  <li>numbered list item 2</li>
+</ol>
+
+<blockquote>
+  blockquote
+  should be part of the same
+  <blockquote>
+    nested blockquote, interesting
+  </blockquote>
+</blockquote>
+
+<p>This better <code>work</code>.</p>
+
+<pre>
+  <code>
+    Too bad i don't expect much from it.
+  </code>
+</pre>
+
+<b>bold talk</b>
+<i>italian duck</i>
+<u>underlined block</u>
+<s>struck-through much</s>
+
+<strong>strong people</strong>
+<em>important stuff</em>
+<del>this was never here</del>
+
+<table>
+  <thead>
+    <tr>
+      <th>good lord</th>
+      <th>this is going to</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>god-awful</td>
+      <td>to parse</td>
+    </tr>
+  </tbody>
+</table>
+
+here's a link to my <a href="https://github.com/Keyboard1000n17/remder">repo</a>
+
+<img src="https://github.com/Keyboard1000n17/OSPedia/tree/master/assets/global/OSPedia-logo.svg" alt="alt text">

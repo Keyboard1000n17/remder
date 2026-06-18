@@ -1,6 +1,6 @@
-# Level 1 afx heading
+# Level 1 afx heading ##
 
-## Level 2 afx heading
+## Level 2 afx heading #\#
 
 Level 1 setext heading
 ======================

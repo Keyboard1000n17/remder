@@ -49,14 +49,23 @@ export default async function parse(input) {
     let blockType;
     let content;
     const line = splitInput[index];
-    const afxHeading = line.match(blockMatches.afxHeading);
 
-    if (afxHeading) {
+    const afxHeading = line.match(blockMatches.afxHeading);
+    const thematicBreak = /^([-_\*]\s*){3,}$/.test(line);
+
+    if (thematicBreak) {
+      tokens.push({ type: "thematicBreak" });
+    } else if (afxHeading) {
       tokens.push(
         { type: "heading-start", content: "" },
-        { type: "text", content: afxHeading[2] },
+        { type: "text", content: afxHeading[2], level: afxHeading[1] },
         { type: "heading-end", content: "" },
       );
+    } else if (line.match(/^\s{0,3}(?:>|\*|\+|-|_{3,}|\d+[\.)])/)) {
+      // ignore for now because what the fuck? i think this should
+      // be matched second-last, since the gfm spec states that if
+      // the underline isn't there, it can only be interpreted as a
+      // paragraph.
     }
     index++;
   }

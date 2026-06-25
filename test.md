@@ -21,6 +21,10 @@ Paragraph
 >> nested blockquote
 
 <!--comment shouldn't get rendered-->
+<!--
+  this comment shouldn't
+  get rendered
+  either -->
 
 ---
 

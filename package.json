@@ -10,6 +10,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "figlet": "^1.11.0"
+    "markdown-it": "^14.2.0"
   }
 }

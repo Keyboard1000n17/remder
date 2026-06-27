@@ -8,6 +8,7 @@ function giveFields(obj) {
       nesting: token.nesting,
       content: token.content,
       children: token.children,
+      info: token.info,
     };
     if (token.children) toReturn.children = giveFields(token.children);
     return toReturn;

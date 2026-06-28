@@ -1,3 +1,5 @@
+import { Chalk } from "chalk";
+
 let state = ""; // global var
 
 async function getGlyphs() {
@@ -23,6 +25,15 @@ function getStyle(type) {
     default:
       break;
   }
+}
+
+// NOTE: the function being exported here is temporary for testing
+export function renderImage(token) {
+  // token here should be the image token inside an inline token
+  if (token.type !== "inline") throw new Error("WRONG TOKEN IDIOT DEV");
+  const childTokenToParse = token.children;
+  if (childTokenToParse.type !== "image")
+    throw new Error("WRONG TOKEN IDIOT DEV");
 }
 
 function renderInline(text, type) {

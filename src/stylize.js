@@ -1,8 +1,29 @@
+let state = ""; // global var
+
 async function getGlyphs() {
   return await Bun.file("./chars.json").json();
 }
 
 const glyphs = await getGlyphs();
+
+function getStyle(type) {
+  let style = "";
+  switch (type) {
+    case "strong_open":
+      style = "bold";
+      break;
+    case "em_open":
+      style = "emphasis";
+      break;
+    case "link_open":
+      style = "link";
+      break;
+    case "s_open":
+      style = "strikethrough";
+    default:
+      break;
+  }
+}
 
 function renderInline(text, type) {
   let styled = "";
@@ -14,7 +35,20 @@ function renderInline(text, type) {
   return styled;
 }
 
+// WARN: this function is not ready!!!
+// it needs to be worked on and is incomplete!
 function heading(text) {
+  // NOTE: text is actually an object!!!
+  let builtString = "";
+  let innerState = "";
+  for (let child of text.children) {
+    if (child.type.match(/strong|em/)) {
+      innerState = child.type.match(/(strong|em)/)[1];
+      continue;
+    } else if (child.type.match("code")) {
+      innerState = "code";
+    }
+  }
   const convertText = text.toUpperCase().split("");
   let grid = [[], [], [], [], [], [], []];
   for (let i = 0; i < convertText.length; i++) {
@@ -31,11 +65,30 @@ function heading(text) {
   output += styled;
 }
 
+function paragraph(text) {
+  // NOTE: text is actually an object!!!
+  let str = "";
+  if (state.split(">").includes("paragraph")) {
+    for (let t of text.children) {
+      const match = /^(.*?)_open/.match(t.type);
+      if (match) {
+        state += `>${match[1]}`;
+      } else if (/^(.*?)_close/.test(t.type)) {
+        state = state.substring(0, state.lastIndexOf(">"));
+      } else if (t.type === "text") {
+        const style = getStyle(t.type);
+        str += renderInline(t.content, style);
+      } // end if
+    } // end for
+  } // end if
+  return str;
+}
+
 export default function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
-  let state = "";
   const output = [];
   let index = 0;
+
   while (index < input.length) {
     const push = {
       type: "",
@@ -43,21 +96,27 @@ export default function stylize(input) {
     };
     const i = input[index];
 
+    // HEADING
+    if (i.type === "heading_open") {
+      state += "heading";
+      push.type = "heading";
+      i++;
+      if (input[index] === "inline") {
+        push.content = heading(input[index]);
+      }
+    }
+
+    // PARAGRAPH
     if (i.type === "paragraph_open") {
       state += "paragraph";
       push.type = "paragraph";
-      index++;
+      i++;
+      if (input[index].type === "inline")
+        push.content = paragraph(input[index]);
+      i++;
+      if (input[index].type === "paragraph_close")
+        state = state.substring(0, state.lastIndexOf(">"));
     }
-    if (input[index].type === "inline") {
-      let str = "";
-      for (let t of input[index].children) {
-        const match = /^(.*?)_open/.match(t.type);
-        if (match) {
-          state += `>${match[1]}`;
-        } else if (/^(.*?)_close/.test(t.type)) {
-          state = state.substring(0, state.lastIndexOf(">"));
-        } // end if
-      } // end for
-    } // end if
+    output.push(push);
   }
 }

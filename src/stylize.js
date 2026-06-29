@@ -1,6 +1,7 @@
 import { Chalk } from "chalk";
+import { TerminalLink } from "terminal-link";
 
-let state = ""; // global var
+let state = []; // global var
 
 async function getGlyphs() {
   return await Bun.file("./chars.json").json();
@@ -15,83 +16,126 @@ function getStyle(type) {
       style = "bold";
       break;
     case "em_open":
-      style = "emphasis";
+      style = "italic";
       break;
     case "link_open":
       style = "link";
       break;
     case "s_open":
       style = "strikethrough";
+      break;
+    case "code_inline":
+      style = "code";
+      break;
     default:
+      style = "plain";
       break;
   }
 }
 
-// NOTE: the function being exported here is temporary for testing
-export function renderImage(token) {
-  // token here should be the image token inside an inline token
-  if (token.type !== "inline") throw new Error("WRONG TOKEN IDIOT DEV");
-  const childTokenToParse = token.children;
-  if (childTokenToParse.type !== "image")
-    throw new Error("WRONG TOKEN IDIOT DEV");
+// here's a set of microfunctions: these are there just because i
+// don't have a better way besides if statements
+
+function bold(text) {
+  return Chalk.bold(text);
 }
 
-function renderInline(text, type) {
+function italic(text) {
+  return Chalk.italic(text);
+}
+
+function strikethrough(text) {
+  return Chalk.strikethrough(text);
+}
+
+function code(text) {
+  return Chalk.bgBlack(text);
+}
+
+// NOTE: the function being exported here is temporary for testing
+export async function image(token) {
+  // token here should be the image token inside an inline token
+  if (token.type !== "inline" || token.children[0].type !== "image")
+    throw new Error("WRONG TOKEN IDIOT DEV");
+  const childTokenToParse = token.children[0];
+  const image = await smth();
+}
+
+function renderInline(token) {
+  // token is a token with type = "inline"
   let styled = "";
-  if (type === "text") styled = text;
-  else if (type === "bold") styled = `\x1b[1m${text}\x1b[0m`;
-  else if (type === "emphasis") styled = `\x1b[3m${text}\x1b[0m`;
-  else if (type === "strikethrough") styled = `\x1b[9m${text}\x1b[0m`;
-  else if (type === "code") styled = `\x1b[48;5;244${text}\x1b[0m`;
-  return styled;
+  if (token.type === "inline") {
+    for (let i = 0; i < token.children.length; i++) {
+      const child = token.children[i];
+      const type = child.type;
+      if (/_open/.test(type)) {
+        state.push(type);
+      } else if (/_close/.test(type)) {
+        state.pop();
+      } else if (type === "text") {
+        const nesting = state.slice(state.indexOf("inline"));
+        let temp = token.content;
+        for (let j = nesting.length; j >= 0; j++) {
+          temp = globalThis[nesting[j]](temp);
+        }
+      }
+    }
+    return styled;
+  } else throw new Error("WRONG TOKEN DUMMY DEV");
 }
 
 // WARN: this function is not ready!!!
 // it needs to be worked on and is incomplete!
-function heading(text) {
-  // NOTE: text is actually an object!!!
+function heading(token) {
   let builtString = "";
   let innerState = "";
-  for (let child of text.children) {
+  const links = [];
+  while (index < token.children) {
+    const child = token.children[index];
     if (child.type.match(/strong|em/)) {
       innerState = child.type.match(/(strong|em)/)[1];
       continue;
     } else if (child.type.match("code")) {
       innerState = "code";
+      continue;
+    } else if (child.type === "link_open") {
+      innerState = "link";
+      const linkUrl = child.attrGet("href");
+      index++;
+      const linkText = token.children[index].content;
+      links.push({ text: linkText, url: linkUrl });
+      continue;
     }
   }
   const convertText = text.toUpperCase().split("");
   let grid = [[], [], [], [], [], [], []];
+  const almostStyled = [];
+  let index = 0;
   for (let i = 0; i < convertText.length; i++) {
     const character = convertText[i];
     for (let j in grid) {
       grid[j].push(glyphs.h1[character][j]);
     }
   }
-  const almostStyled = [];
   for (let row of grid) {
     almostStyled.push(row.join(""));
   }
-  styled = almostStyled.join("\n");
-  output += styled;
+  builtString = almostStyled.join("\n");
+  return builtString;
 }
 
-function paragraph(text) {
+export function paragraph(text) {
   // NOTE: text is actually an object!!!
   let str = "";
-  if (state.split(">").includes("paragraph")) {
-    for (let t of text.children) {
-      const match = /^(.*?)_open/.match(t.type);
-      if (match) {
-        state += `>${match[1]}`;
-      } else if (/^(.*?)_close/.test(t.type)) {
-        state = state.substring(0, state.lastIndexOf(">"));
-      } else if (t.type === "text") {
-        const style = getStyle(t.type);
-        str += renderInline(t.content, style);
-      } // end if
-    } // end for
-  } // end if
+  for (let t of text.children) {
+    if (t.children && t.children.length > 0) {
+      for (let child of t.children) {
+        str += paragraph(child);
+      }
+    }
+    const style = getStyle(t.type);
+    str += renderInline(t.content, style);
+  } // end for
   return str;
 }
 
@@ -105,13 +149,14 @@ export default function stylize(input) {
       type: "",
       content: "",
     };
-    const i = input[index];
+
+    let i = input[index];
 
     // HEADING
     if (i.type === "heading_open") {
-      state += "heading";
+      state.push("heading");
       push.type = "heading";
-      i++;
+      index++;
       if (input[index] === "inline") {
         push.content = heading(input[index]);
       }
@@ -119,15 +164,16 @@ export default function stylize(input) {
 
     // PARAGRAPH
     if (i.type === "paragraph_open") {
-      state += "paragraph";
+      state.push("paragraph");
       push.type = "paragraph";
-      i++;
+      index++;
       if (input[index].type === "inline")
         push.content = paragraph(input[index]);
-      i++;
-      if (input[index].type === "paragraph_close")
-        state = state.substring(0, state.lastIndexOf(">"));
+      index++;
+      if (input[index].type === "paragraph_close") state.pop();
     }
+
+    // no more! push the `push` object to the output array
     output.push(push);
   }
 }

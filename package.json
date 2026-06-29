@@ -10,11 +10,12 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "chalk": "^5.6.2",
     "markdown-it": "^14.2.0",
     "markdown-it-github-alerts": "^1.0.1",
     "markdown-it-sanitizer": "^0.4.3",
     "markdown-it-task-lists": "^2.1.1",
     "shiki": "^4.3.0",
-    "terminal-image": "^4.3.0"
+    "terminal-link": "^5.0.0"
   }
 }

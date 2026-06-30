@@ -1,13 +1,9 @@
-import { Chalk } from "chalk";
-import { TerminalLink } from "terminal-link";
+import Chalk from "chalk";
+import terminalLink from "terminal-link";
 
 let state = []; // global var
 
-async function getGlyphs() {
-  return await Bun.file("./chars.json").json();
-}
-
-const glyphs = await getGlyphs();
+const glyphs = await Bun.file("./chars.json").json();
 
 function getStyle(type) {
   let style = "";
@@ -31,6 +27,7 @@ function getStyle(type) {
       style = "plain";
       break;
   }
+  return style;
 }
 
 // here's a set of microfunctions: these are there just because i
@@ -53,11 +50,14 @@ function code(text) {
 }
 
 // NOTE: the function being exported here is temporary for testing
-export async function image(token) {
+export async function image(token, isFileRemote) {
   // token here should be the image token inside an inline token
   if (token.type !== "inline" || token.children[0].type !== "image")
     throw new Error("WRONG TOKEN IDIOT DEV");
   const childTokenToParse = token.children[0];
+  const path = childTokenToParse.attrGet("src");
+  const file = isFileRemote ? await fetch(path) : Bun.file(path);
+  // use Bun.fileURLToPath()
   const image = await smth();
 }
 
@@ -86,31 +86,27 @@ function renderInline(token) {
 
 // WARN: this function is not ready!!!
 // it needs to be worked on and is incomplete!
-function heading(token) {
+export function heading(token) {
   let builtString = "";
-  let innerState = "";
   const links = [];
-  while (index < token.children) {
+  let index = 0;
+  let text = "";
+  while (index < token.children.length) {
     const child = token.children[index];
-    if (child.type.match(/strong|em/)) {
-      innerState = child.type.match(/(strong|em)/)[1];
-      continue;
-    } else if (child.type.match("code")) {
-      innerState = "code";
-      continue;
-    } else if (child.type === "link_open") {
-      innerState = "link";
+    if (child.type === "link_open") {
       const linkUrl = child.attrGet("href");
       index++;
       const linkText = token.children[index].content;
+      text += linkText;
       links.push({ text: linkText, url: linkUrl });
-      continue;
+    } else {
+      text += child.content;
     }
+    index++;
   }
   const convertText = text.toUpperCase().split("");
   let grid = [[], [], [], [], [], [], []];
   const almostStyled = [];
-  let index = 0;
   for (let i = 0; i < convertText.length; i++) {
     const character = convertText[i];
     for (let j in grid) {
@@ -121,6 +117,10 @@ function heading(token) {
     almostStyled.push(row.join(""));
   }
   builtString = almostStyled.join("\n");
+  for (let link of links) {
+    const builtLink = `\n${link.text}: ${terminalLink(link.url, link.url, { fallback: false })}`;
+    builtString += builtLink;
+  }
   return builtString;
 }
 

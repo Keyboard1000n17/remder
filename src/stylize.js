@@ -1,5 +1,9 @@
 import Chalk from "chalk";
 import terminalLink from "terminal-link";
+import terminalImage from "terminal-image";
+import got from "got";
+import { Resvg } from "@resvg/resvg-js";
+import * as Shiki from "shiki";
 
 let state = []; // global var
 
@@ -49,16 +53,27 @@ function code(text) {
   return Chalk.bgBlack(text);
 }
 
-// NOTE: the function being exported here is temporary for testing
-export async function image(token, isFileRemote) {
+// NOTE: the function is being exported here temporarily for testing
+export async function image(token, isFileRemote, areThereOtherTokens) {
   // token here should be the image token inside an inline token
-  if (token.type !== "inline" || token.children[0].type !== "image")
-    throw new Error("WRONG TOKEN IDIOT DEV");
-  const childTokenToParse = token.children[0];
-  const path = childTokenToParse.attrGet("src");
-  const file = isFileRemote ? await fetch(path) : Bun.file(path);
+  if (token.type !== "image") throw new Error("WRONG TOKEN IDIOT DEV");
+  const path = token.attrGet("src");
+  const width = token.attrGet("width");
+  const height = token.attrGet("height");
+  const isSvg = /\.svg$/.test(path);
+  console.log(path);
+  const rawFile = isFileRemote ? await got(path).buffer() : Bun.file(path);
+  const buffer = await (isSvg
+    ? new Resvg(file, {}).render().asPng()
+    : new Bun.Image(rawFile).png().buffer());
+  if (isFileRemote && !file.ok) throw new Error("Network error");
   // use Bun.fileURLToPath()
-  const image = await smth();
+  const noImageSupport =
+    /^screen|tmux/.test(process.env.TERM) || process.env.NO_COLOR;
+  const opts = {};
+  if (noImageSupport) opts.preferNativeRender = false;
+  const image = await terminalImage.buffer(buffer, opts);
+  return image;
 }
 
 function renderInline(token) {

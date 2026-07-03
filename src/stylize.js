@@ -60,20 +60,32 @@ export async function image(token, isFileRemote, areThereOtherTokens) {
   const path = token.attrGet("src");
   const width = token.attrGet("width");
   const height = token.attrGet("height");
+  const alt = token.attrGet("alt");
   const isSvg = /\.svg$/.test(path);
-  console.log(path);
   const rawFile = isFileRemote ? await got(path).buffer() : Bun.file(path);
   const buffer = await (isSvg
     ? new Resvg(file, {}).render().asPng()
     : new Bun.Image(rawFile).png().buffer());
   if (isFileRemote && !file.ok) throw new Error("Network error");
-  // use Bun.fileURLToPath()
-  const noImageSupport =
-    /^screen|tmux/.test(process.env.TERM) || process.env.NO_COLOR;
+  const noColorSupport =
+    /^screen$/.test(process.env.TERM) || process.env.NO_COLOR;
+  // other terminals are handled by `supports-color` package that `terminal-image` uses
+  const noImageSupport = /tmux|screen|xterm|alacritty/.test(process.env.TERM);
   const opts = {};
+  if (height) {
+    opts.height = height;
+  } else if (areThereOtherTokens) {
+    opts.height = 1;
+  }
+  if (!areThereOtherTokens) {
+    opts.width = width ? width : process.stdout.columns / 2 || 40;
+  }
+  const imgObj = {};
   if (noImageSupport) opts.preferNativeRender = false;
-  const image = await terminalImage.buffer(buffer, opts);
-  return image;
+  imgObj.image = await terminalImage.buffer(buffer, opts);
+  imgObj.alt = alt;
+  imgObj.useColors = noColorSupport ? false : true;
+  return imgObj;
 }
 
 function renderInline(token) {

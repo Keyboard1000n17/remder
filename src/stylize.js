@@ -34,86 +34,101 @@ function getStyle(type) {
   return style;
 }
 
-// here's a set of microfunctions: these are there just because i
-// don't have a better way besides if statements
-
-function bold(text) {
-  return Chalk.bold(text);
-}
-
-function italic(text) {
-  return Chalk.italic(text);
-}
-
-function strikethrough(text) {
-  return Chalk.strikethrough(text);
-}
-
-function code(text) {
-  return Chalk.bgBlack(text);
-}
+const inline = {
+  strong: (text) => Chalk.bold(text),
+  italic: (text) => Chalk.italic(text),
+  strikethrough: (text) => Chalk.strikethrough(text),
+  code: (text) => Chalk.bgBlack(text),
+  text: (text) => text,
+};
 
 // NOTE: the function is being exported here temporarily for testing
-export async function image(token, isFileRemote, areThereOtherTokens) {
+export async function image(token, areThereOtherTokens) {
   // token here should be the image token inside an inline token
   if (token.type !== "image") throw new Error("WRONG TOKEN IDIOT DEV");
+  const getFileBuffer = async (path) => {
+    try {
+      return path.startsWith("http")
+        ? await got(path).buffer()
+        : Bun.file(path).arrayBuffer();
+    } catch (err) {
+      return null;
+    }
+  };
   const path = token.attrGet("src");
-  const width = token.attrGet("width");
-  const height = token.attrGet("height");
   const alt = token.attrGet("alt");
-  const isSvg = /\.svg$/.test(path);
-  const rawFile = isFileRemote ? await got(path).buffer() : Bun.file(path);
-  const buffer = await (isSvg
-    ? new Resvg(file, {}).render().asPng()
-    : new Bun.Image(rawFile).png().buffer());
-  if (isFileRemote && !file.ok) throw new Error("Network error");
-  const noColorSupport =
-    /^screen$/.test(process.env.TERM) || process.env.NO_COLOR;
-  // other terminals are handled by `supports-color` package that `terminal-image` uses
-  const noImageSupport = /tmux|screen|xterm|alacritty/.test(process.env.TERM);
-  const opts = {};
-  if (height) {
-    opts.height = height;
-  } else if (areThereOtherTokens) {
-    opts.height = 1;
+  const buffer = await getFileBuffer(path);
+  const opts = {
+    preferNativeRender: /tmux|screen|xterm|alacritty/.test(process.env.term),
+  };
+  if (areThereOtherTokens) {
+    opts.height = token.attrGet("height") || 1;
+  } else {
+    const isWidthDefined = token.attrGet("width");
+    opts.width = isWidthDefined
+      ? isWidthDefined
+      : process.stdout.columns / 2 || 40;
   }
-  if (!areThereOtherTokens) {
-    opts.width = width ? width : process.stdout.columns / 2 || 40;
-  }
-  const imgObj = {};
-  if (noImageSupport) opts.preferNativeRender = false;
-  imgObj.image = await terminalImage.buffer(buffer, opts);
-  imgObj.alt = alt;
-  imgObj.useColors = noColorSupport ? false : true;
+  const imgObj = {
+    buffer: buffer,
+    opts: opts,
+    imageAlt: alt,
+    shouldDisplayImage: !(
+      /^screen$/.test(process.env.TERM) || process.env.NO_COLOR
+    ),
+    isGif: /\.gif$/.test(path),
+    renderImage: async (imgObj) => {
+      if (imgObj.shouldDisplayImage) {
+        const image = await (imgObj.isGif
+          ? terminalImage.gifBuffer(imgObj.buffer, opts)
+          : terminalImage.buffer(imgObj.buffer, opts));
+        return image;
+      } else {
+        return Chalk.dim(imgObj.imageAlt);
+      }
+    },
+  };
   return imgObj;
 }
 
-function renderInline(token) {
+async function renderInline(token) {
   // token is a token with type = "inline"
-  let styled = "";
-  if (token.type === "inline") {
-    for (let i = 0; i < token.children.length; i++) {
-      const child = token.children[i];
-      const type = child.type;
-      if (/_open/.test(type)) {
-        state.push(type);
-      } else if (/_close/.test(type)) {
-        state.pop();
-      } else if (type === "text") {
-        const nesting = state.slice(state.indexOf("inline"));
-        let temp = token.content;
-        for (let j = nesting.length; j >= 0; j++) {
-          temp = globalThis[nesting[j]](temp);
-        }
+  if (token.type !== "inline")
+    throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
+  const styled = {
+    type: "",
+    contents: [],
+  };
+  for (let i = 0; i < token.children.length; i++) {
+    const child = token.children[i];
+    const type = child.type;
+    if (/_open/.test(type)) {
+      state.push(type.split("_")[0]);
+    } else if (/_close/.test(type)) {
+      state.pop();
+    } else if (type === "image") {
+      const areThereOtherTokens = token.children.length > 1;
+      styled.type = "image";
+      styled.contents.push({
+        type: "image",
+        content: image(child, areThereOtherTokens),
+      });
+    } else if (type === "text") {
+      state.push("text");
+      const nesting = state.slice(state.indexOf("inline") + 1);
+      let temp = child.content;
+      for (let j = nesting.length - 1; j >= 0; j--) {
+        temp = inline[nesting[j]](temp);
       }
+      styled.contents.push({ type: "text", content: temp });
+      styled.type = "text";
+      state.pop();
     }
-    return styled;
-  } else throw new Error("WRONG TOKEN DUMMY DEV");
+  }
+  return styled;
 }
 
-// WARN: this function is not ready!!!
-// it needs to be worked on and is incomplete!
-export function heading(token) {
+function heading(token) {
   let builtString = "";
   const links = [];
   let index = 0;
@@ -151,22 +166,7 @@ export function heading(token) {
   return builtString;
 }
 
-export function paragraph(text) {
-  // NOTE: text is actually an object!!!
-  let str = "";
-  for (let t of text.children) {
-    if (t.children && t.children.length > 0) {
-      for (let child of t.children) {
-        str += paragraph(child);
-      }
-    }
-    const style = getStyle(t.type);
-    str += renderInline(t.content, style);
-  } // end for
-  return str;
-}
-
-export default function stylize(input) {
+export default async function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
   const output = [];
   let index = 0;
@@ -194,13 +194,17 @@ export default function stylize(input) {
       state.push("paragraph");
       push.type = "paragraph";
       index++;
-      if (input[index].type === "inline")
-        push.content = paragraph(input[index]);
+      if (input[index].type === "inline") {
+        state.push("inline");
+        push.content = await renderInline(input[index]);
+      }
       index++;
       if (input[index].type === "paragraph_close") state.pop();
     }
 
     // no more! push the `push` object to the output array
     output.push(push);
+    index++;
   }
+  return output;
 }

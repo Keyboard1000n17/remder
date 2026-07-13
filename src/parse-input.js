@@ -2,7 +2,7 @@ import MarkdownIt from "markdown-it";
 import GithubAlerts from "markdown-it-github-alerts";
 import TaskLists from "markdown-it-task-lists";
 
-export default function parse(input) {
+export default async function parse(input) {
   const md = new MarkdownIt({
     langPrefix: "langauge-",
     html: true,

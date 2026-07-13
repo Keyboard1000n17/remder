@@ -3,6 +3,7 @@ import terminalLink from "terminal-link";
 import terminalImage from "terminal-image";
 import got from "got";
 import { Resvg } from "@resvg/resvg-js";
+import { FontStyle } from "@shikijs/vscode-textmate";
 import * as Shiki from "shiki";
 
 let state = []; // global var
@@ -166,6 +167,44 @@ function heading(token) {
   return builtString;
 }
 
+export async function codeBlock(token) {
+  if (!token.type.match(/fence|code_block/))
+    throw new Error("WRONG TOKEN HOW IS THIS DEV SO STUPID");
+  if (
+    Object.keys(Shiki.bundledLanguages).includes(token.info) ||
+    Object.keys(Shiki.bundledLanguagesAlias).includes(token.info)
+  ) {
+    const shikiTokens = await Shiki.codeToTokens(token.content, {
+      lang: token.info,
+      theme: "github-dark",
+    });
+    const stylizedCodeArr = [];
+    for (let line of shikiTokens.tokens) {
+      let styledTokens = [];
+      for (let token of line) {
+        let temp = Chalk.hex(token.color)(token.content);
+        if (token.color & FontStyle.Bold) temp = Chalk.bold(temp);
+        if (token.color & FontStyle.Italic) temp = Chalk.italic(temp);
+        if (token.color & FontStyle.Underline) temp = Chalk.underline(temp);
+        if (token.color & FontStyle.Strikethrough)
+          temp = Chalk.strikethrough(temp);
+        styledTokens.push(temp);
+      }
+      stylizedCodeArr.push(styledTokens.join(""));
+    }
+    const code = {
+      code: stylizedCodeArr.join("\n"),
+      language: shikiTokens ? shikiTokens.grammarState.lang : "plain",
+    };
+    return code;
+  } else {
+    return {
+      code: token.content,
+      language: token.info !== "" ? token.info : "plain",
+    };
+  }
+}
+
 export default async function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
   const output = [];
@@ -187,6 +226,8 @@ export default async function stylize(input) {
       if (input[index] === "inline") {
         push.content = heading(input[index]);
       }
+      index++;
+      if (input[index].type === "heading_close") state.pop();
     }
 
     // PARAGRAPH
@@ -200,6 +241,12 @@ export default async function stylize(input) {
       }
       index++;
       if (input[index].type === "paragraph_close") state.pop();
+    }
+
+    if (i.type === "fence" || i.type === "code_block") {
+      state.push("fence");
+      push.type = "codeBlock";
+      push.content = await codeBlock(i);
     }
 
     // no more! push the `push` object to the output array

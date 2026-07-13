@@ -243,10 +243,20 @@ export default async function stylize(input) {
       if (input[index].type === "paragraph_close") state.pop();
     }
 
+    // CODE BLOCK
     if (i.type === "fence" || i.type === "code_block") {
       state.push("fence");
       push.type = "codeBlock";
       push.content = await codeBlock(i);
+      state.pop(); // pops off "fence"
+    }
+
+    // HORIZONTAL RULE
+    if (i.type === "hr") {
+      state.push("thematic-break");
+      push.type = "thematic-break";
+      push.content = "";
+      state.pop();
     }
 
     // no more! push the `push` object to the output array

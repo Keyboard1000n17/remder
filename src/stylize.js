@@ -10,39 +10,6 @@ let state = []; // global var
 
 const glyphs = await Bun.file("./chars.json").json();
 
-function getStyle(type) {
-  let style = "";
-  switch (type) {
-    case "strong_open":
-      style = "bold";
-      break;
-    case "em_open":
-      style = "italic";
-      break;
-    case "link_open":
-      style = "link";
-      break;
-    case "s_open":
-      style = "strikethrough";
-      break;
-    case "code_inline":
-      style = "code";
-      break;
-    default:
-      style = "plain";
-      break;
-  }
-  return style;
-}
-
-const inline = {
-  strong: (text) => Chalk.bold(text),
-  italic: (text) => Chalk.italic(text),
-  strikethrough: (text) => Chalk.strikethrough(text),
-  code: (text) => Chalk.bgBlack(text),
-  text: (text) => text,
-};
-
 // NOTE: the function is being exported here temporarily for testing
 export async function image(token, areThereOtherTokens) {
   // token here should be the image token inside an inline token
@@ -70,6 +37,7 @@ export async function image(token, areThereOtherTokens) {
       ? isWidthDefined
       : process.stdout.columns / 2 || 40;
   }
+
   const imgObj = {
     buffer: buffer,
     opts: opts,
@@ -78,58 +46,104 @@ export async function image(token, areThereOtherTokens) {
       /^screen$/.test(process.env.TERM) || process.env.NO_COLOR
     ),
     isGif: /\.gif$/.test(path),
-    renderImage: async (imgObj) => {
-      if (imgObj.shouldDisplayImage) {
-        const image = await (imgObj.isGif
-          ? terminalImage.gifBuffer(imgObj.buffer, opts)
-          : terminalImage.buffer(imgObj.buffer, opts));
-        return image;
-      } else {
-        return Chalk.dim(imgObj.imageAlt);
-      }
-    },
+  };
+
+  imgObj.prototype.render = async (imgObj) => {
+    if (imgObj.shouldDisplayImage) {
+      const image = await (imgObj.isGif
+        ? terminalImage.gifBuffer(imgObj.buffer, opts)
+        : terminalImage.buffer(imgObj.buffer, opts));
+      return image;
+    } else {
+      return Chalk.dim(imgObj.imageAlt);
+    }
   };
   return imgObj;
 }
+
+function getStyle(type) {
+  let style = "";
+  switch (type) {
+    case "strong_open":
+      style = "bold";
+      break;
+    case "em_open":
+      style = "italic";
+      break;
+    case "link_open":
+      style = "link";
+      break;
+    case "s_open":
+      style = "strikethrough";
+      break;
+    case "code_inline":
+      style = "code";
+      break;
+    default:
+      style = "plain";
+      break;
+  }
+  return style;
+}
+
+const inline = {
+  bold: (text) => Chalk.bold(text),
+  italic: (text) => Chalk.italic(text),
+  strikethrough: (text) => Chalk.strikethrough(text),
+  code: (text) => Chalk.bgBlack(text),
+  plain: (text) => text,
+  text: (text) => text,
+};
 
 async function renderInline(token) {
   // token is a token with type = "inline"
   if (token.type !== "inline")
     throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
-  const styled = {
-    type: "",
-    contents: [],
-  };
+
+  const styled = [];
+
   for (let i = 0; i < token.children.length; i++) {
     const child = token.children[i];
     const type = child.type;
     if (/_open/.test(type)) {
-      state.push(type.split("_")[0]);
+      state.push(getStyle(type));
     } else if (/_close/.test(type)) {
       state.pop();
+    } else if (type === "link_open") {
+      const linkUrl = child.attrGet("href");
+      i++;
+      const linkText = token.children[index].content;
+      styled.push({
+        type: "link",
+        content: terminalLink(linkText, linkUrl, { fallback: false }),
+      });
     } else if (type === "image") {
       const areThereOtherTokens = token.children.length > 1;
-      styled.type = "image";
       styled.contents.push({
         type: "image",
-        content: image(child, areThereOtherTokens),
+        content: await image(child, areThereOtherTokens),
       });
     } else if (type === "text") {
       state.push("text");
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
       for (let j = nesting.length - 1; j >= 0; j--) {
+        console.log(state);
         temp = inline[nesting[j]](temp);
       }
-      styled.contents.push({ type: "text", content: temp });
-      styled.type = "text";
+      // end for
+      styled.push({ type: "text", content: temp });
       state.pop();
     }
+    state.pop();
   }
+  // end for
   return styled;
 }
 
 function heading(token) {
+  if (token.type !== "inline")
+    throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
   let builtString = "";
   const links = [];
   let index = 0;
@@ -205,6 +219,56 @@ export async function codeBlock(token) {
   }
 }
 
+export async function table(tokens) {
+  const tableRows = [];
+  const state = [];
+  let currentRow = null;
+  let currentAlign = "";
+
+  // State & Parsing Handlers
+  const handlers = {
+    thead_open: () => state.push("thead"),
+    tbody_open: () => state.push("tbody"),
+    thead_close: () => state.pop(),
+    tbody_close: () => state.pop(),
+
+    tr_open: () => {
+      currentRow = [];
+    },
+    tr_close: () => {
+      if (currentRow) tableRows.push(currentRow);
+      currentRow = null;
+    },
+
+    th_open: (token) => {
+      const alignMatch = token.attrGet("style").match(/text-align:\s*(\w+)/);
+      currentAlign = alignMatch ? alignMatch[1] : "center";
+    },
+    td_open: (token) => {
+      const alignMatch = token.attrGet("style").match(/text-align:\s*(\w+)/);
+      currentAlign = alignMatch ? alignMatch[1] : "left";
+    },
+
+    inline: async (token) => {
+      if (!currentRow) return;
+      currentRow.push({
+        content: await renderInline(token),
+        textAlign: currentAlign,
+      });
+    },
+  };
+
+  // Execution Loop
+  for (const token of tokens) {
+    const handle = handlers[token.type];
+    if (handle) {
+      await handle(token);
+    }
+  }
+
+  return tableRows;
+}
+
 export default async function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
   const output = [];
@@ -257,6 +321,19 @@ export default async function stylize(input) {
       push.type = "thematic-break";
       push.content = "";
       state.pop();
+    }
+
+    // TABLE
+    if (i.type === "table_open") {
+      state.push("table");
+      push.type = "table";
+      const tableTokens = [];
+      while (input[index].type !== "table_close") {
+        tableTokens.push(input[index]);
+        index++;
+      }
+      if (input[index].type !== "table_close") tableTokens.push(input[index]);
+      push.content = await table(tableTokens);
     }
 
     // no more! push the `push` object to the output array

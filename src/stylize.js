@@ -100,44 +100,60 @@ async function renderInline(token) {
   if (token.type !== "inline")
     throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
 
+  state.push("inline");
   const styled = [];
 
-  for (let i = 0; i < token.children.length; i++) {
+  let i = 0;
+  let text = "";
+  while (i < token.children.length) {
     const child = token.children[i];
     const type = child.type;
+
     if (/_open/.test(type)) {
       state.push(getStyle(type));
-    } else if (/_close/.test(type)) {
+    }
+
+    if (/_close/.test(type)) {
       state.pop();
-    } else if (type === "link_open") {
+    }
+
+    if (type === "link_open") {
+      // handle links
       const linkUrl = child.attrGet("href");
       i++;
-      const linkText = token.children[index].content;
+      const linkText = token.children[i].content;
       styled.push({
         type: "link",
         content: terminalLink(linkText, linkUrl, { fallback: false }),
       });
-    } else if (type === "image") {
+    }
+
+    if (type === "image") {
+      // handle images
+      styled.push({ type: "text", content: text });
+      text = "";
       const areThereOtherTokens = token.children.length > 1;
-      styled.contents.push({
+      styled.push({
         type: "image",
         content: await image(child, areThereOtherTokens),
       });
-    } else if (type === "text") {
-      state.push("text");
+    }
+
+    if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
       for (let j = nesting.length - 1; j >= 0; j--) {
-        console.log(state);
         temp = inline[nesting[j]](temp);
       }
       // end for
-      styled.push({ type: "text", content: temp });
-      state.pop();
+      text += temp;
     }
-    state.pop();
+
+    i++;
   }
   // end for
+  if (text !== "") styled.push({ type: "text", content: text });
+  state.pop();
   return styled;
 }
 
@@ -287,7 +303,7 @@ export default async function stylize(input) {
       state.push("heading");
       push.type = "heading";
       index++;
-      if (input[index] === "inline") {
+      if (input[index].type === "inline") {
         push.content = heading(input[index]);
       }
       index++;
@@ -300,11 +316,10 @@ export default async function stylize(input) {
       push.type = "paragraph";
       index++;
       if (input[index].type === "inline") {
-        state.push("inline");
         push.content = await renderInline(input[index]);
       }
       index++;
-      if (input[index].type === "paragraph_close") state.pop();
+      // after this index++, the token type will be "paragraph_close"
     }
 
     // CODE BLOCK
@@ -340,5 +355,7 @@ export default async function stylize(input) {
     output.push(push);
     index++;
   }
+
+  // state = [];
   return output;
 }

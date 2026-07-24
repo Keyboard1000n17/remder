@@ -235,6 +235,10 @@ export async function codeBlock(token) {
   }
 }
 
+async function processHtml(tokens) {
+  return null;
+}
+
 export async function table(tokens) {
   const tableRows = [];
   const state = [];

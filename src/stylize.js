@@ -58,6 +58,7 @@ export async function image(token, areThereOtherTokens) {
       return Chalk.dim(imgObj.imageAlt);
     }
   };
+  // TODO: turn imgObj into a class so we can use prototypes
   return imgObj;
 }
 
@@ -235,10 +236,6 @@ export async function codeBlock(token) {
   }
 }
 
-async function processHtml(tokens) {
-  return null;
-}
-
 export async function table(tokens) {
   const tableRows = [];
   const state = [];
@@ -298,12 +295,19 @@ export default async function stylize(input) {
     const push = {
       type: "",
       content: "",
+      properties: {},
     };
-
     let i = input[index];
 
+    // give attrs
+    if (i.attrs) {
+      for (let [key, value] of i.attrs) {
+        push.properties[key] = value;
+      }
+    }
+
     // HEADING
-    if (i.type === "heading_open") {
+    /* if (i.type === "heading_open") {
       state.push("heading");
       push.type = "heading";
       index++;
@@ -315,7 +319,7 @@ export default async function stylize(input) {
     }
 
     // PARAGRAPH
-    if (i.type === "paragraph_open") {
+    else if (i.type === "paragraph_open") {
       state.push("paragraph");
       push.type = "paragraph";
       index++;
@@ -324,10 +328,11 @@ export default async function stylize(input) {
       }
       index++;
       // after this index++, the token type will be "paragraph_close"
+      state.pop();
     }
 
     // CODE BLOCK
-    if (i.type === "fence" || i.type === "code_block") {
+    else if (i.type === "fence" || i.type === "code_block") {
       state.push("fence");
       push.type = "codeBlock";
       push.content = await codeBlock(i);
@@ -335,7 +340,7 @@ export default async function stylize(input) {
     }
 
     // HORIZONTAL RULE
-    if (i.type === "hr") {
+    else if (i.type === "hr") {
       state.push("thematic-break");
       push.type = "thematic-break";
       push.content = "";
@@ -343,7 +348,7 @@ export default async function stylize(input) {
     }
 
     // TABLE
-    if (i.type === "table_open") {
+    else if (i.type === "table_open") {
       state.push("table");
       push.type = "table";
       const tableTokens = [];
@@ -351,8 +356,53 @@ export default async function stylize(input) {
         tableTokens.push(input[index]);
         index++;
       }
-      if (input[index].type !== "table_close") tableTokens.push(input[index]);
+      if (input[index].type === "table_close") tableTokens.push(input[index]);
       push.content = await table(tableTokens);
+    }
+
+    // DIV
+    else if (i.type === "div_open") {
+      state.push("div");
+      push.type = "div";
+      const divChildren = [];
+      index++;
+      // get that div_open token out, if we put div_open
+      // in divChilren it infinitely recurses
+      while (input[index] && input[index].type !== "div_close") {
+        divChildren.push(input[index]);
+        index++;
+      }
+      // index++;
+      const processedDivChildren = await stylize(divChildren);
+      push.content = processedDivChildren;
+      state.pop();
+    } */
+    if (i.type.match(/_open/)) {
+      const accumulatedTokens = [];
+      index++;
+      const tokenType = i.type.split("_")[0];
+      while (input[index].type !== `${tokenType}_close`) {
+        accumulatedTokens.push(input[index]);
+        index++;
+      }
+      const handleTokens = {
+        paragraph: async (tokens) => await renderInline(tokens[0]), // it's always just one inline token
+        table: async (tokens) => await table(tokens),
+        heading: (tokens) => heading(tokens),
+        div: async (tokens) => await stylize(tokens),
+      };
+      push.content = await stylize(accumulatedTokens);
+    } else if (i.type === "inline") {
+      state.push("inline");
+      renderInline(i);
+    } else {
+      throw new Error(
+        Chalk.red.bold(
+          "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
+        ) +
+        "\n" +
+        Chalk.dim(`PS: the token type was ${i.type}`),
+      );
     }
 
     // no more! push the `push` object to the output array

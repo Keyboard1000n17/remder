@@ -2,20 +2,21 @@ import MarkdownIt from "markdown-it";
 import GithubAlerts from "markdown-it-github-alerts";
 import { Parser } from "htmlparser2";
 import Token from "markdown-it/lib/token.mjs";
-
 const aliases = {
   p: "paragraph",
   b: "strong",
-  i: "emph",
-  em: "emph",
-  var: "emph", // var is a valid tag in html apparently
+  i: "em",
+  var: "em", // var is a valid tag in html apparently
   del: "s",
   a: "link",
+  h1: "heading",
+  h2: "heading",
+  h3: "heading",
+  h4: "heading",
+  h5: "heading",
+  h6: "heading",
 };
-let sanitizedText = "";
-let isPreviousTagDisallowed = false;
-const htmlToTokens = []; // the htmlParser pushes to this array
-const blockHtmlTags = [
+const blockHtmlTags = new Set([
   "blockquote",
   "details",
   "div",
@@ -43,7 +44,10 @@ const blockHtmlTags = [
   "thead",
   "tr",
   "td",
-];
+]);
+let sanitizedText = "";
+let isPreviousTagDisallowed = false;
+const htmlToTokens = []; // the htmlParser pushes to this array
 
 const htmlParser = new Parser({
   onopentag(name, attributes) {
@@ -60,7 +64,8 @@ const htmlParser = new Parser({
       openingToken.type =
         name === "img" ? "image" : `${aliases[name] ?? name}_open`;
       // set the attributes
-      if (attributes.length > 0) {
+      if (Object.keys(attributes).length > 0) {
+        openingToken.attrs = [];
         for (const [key, value] of Object.entries(attributes)) {
           openingToken.attrSet(key, value);
         }
@@ -73,6 +78,8 @@ const htmlParser = new Parser({
         openingToken.children = [];
         openingToken.children.push(textToken);
       }
+
+      openingToken.block = blockHtmlTags.has(name);
     }
     htmlToTokens.push(openingToken);
   },
@@ -99,6 +106,7 @@ const htmlParser = new Parser({
         name,
         -1,
       );
+      closingToken.block = blockHtmlTags.has(name);
       htmlToTokens.push(closingToken);
     }
   },
@@ -109,15 +117,32 @@ function convertHtmlToMarkdownItTokens(token) {
     case "html_block": {
       htmlParser.write(token.content);
       const htmlTokens = htmlToTokens.splice(0);
+      const imageTokenIfPresent = htmlTokens.find(
+        (token) => token.type === "image",
+      );
+      if (imageTokenIfPresent) {
+        // if there's an image token, replace it with an inline token that
+        // has the image token as a child
+        const inlineToken = new Token("inline", "", 1);
+        inlineToken.children = [];
+        inlineToken.children.push(imageTokenIfPresent);
+        const indexOfImageToken = htmlTokens.indexOf(imageTokenIfPresent);
+        htmlTokens.splice(indexOfImageToken, 1, inlineToken);
+      }
       return htmlTokens;
     }
     case "inline": {
       const inlineTokens = [];
       for (const child of token.children) {
         const inlineToken = convertHtmlToMarkdownItTokens(child);
-        inlineTokens.push(inlineToken);
+        if (Array.isArray(inlineToken)) {
+          inlineTokens.push(...inlineToken);
+        } else {
+          inlineTokens.push(inlineToken);
+        }
       }
-      return inlineTokens;
+      token.children = inlineTokens;
+      return token;
     }
     case "html_inline": {
       htmlParser.write(token.content);
@@ -143,12 +168,41 @@ export default async function parse(input) {
     for (let token of state.tokens) {
       if (token.type.match(/html|inline/)) {
         const convertedTokens = convertHtmlToMarkdownItTokens(token);
-        parsedTokens.push(...convertedTokens);
+        if (Array.isArray(convertedTokens)) {
+          parsedTokens.push(...convertedTokens);
+        } else {
+          parsedTokens.push(convertedTokens);
+        }
       } else {
         parsedTokens.push(token);
       }
     }
-    state.tokens = parsedTokens;
+
+    // here, we check for non-block elements at the top level.
+    // if present, they get put into an inline token
+    const inlineTokenList = [];
+    const finalProcessedTokens = [];
+    for (const parsedToken of parsedTokens) {
+      if (parsedToken.block) {
+        if (inlineTokenList.length > 0) {
+          const inlineToken = new Token("inline", "", 1);
+          const inlineTokens = inlineTokenList.splice(0); // this empties inlineTokenList
+          inlineToken.children = inlineTokens;
+          finalProcessedTokens.push(inlineToken);
+        }
+        finalProcessedTokens.push(parsedToken);
+      } else if (!parsedToken.block) {
+        inlineTokenList.push(parsedToken);
+      }
+    }
+    // after this for loop, there might still be tokens in inlineTokenList
+    if (inlineTokenList.length > 0) {
+      const inlineToken = new Token("inline", "", 1);
+      const inlineTokens = inlineTokenList.splice(0); // this empties inlineTokenList
+      inlineToken.children = inlineTokens;
+    }
+
+    state.tokens = finalProcessedTokens;
   });
   const modifiedInput = input.replaceAll(/<br( \/)?>/g, "\n\n");
   const tokens = md.parse(modifiedInput);

@@ -143,7 +143,12 @@ async function renderInline(token) {
     if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
+      console.log(state);
       for (let j = nesting.length - 1; j >= 0; j--) {
+        if (!inline[nesting[j]])
+          throw new Error(
+            Chalk.red.bold(`Inline token type ${nesting[j]} does not exist.`),
+          );
         temp = inline[nesting[j]](temp);
       }
       // end for
@@ -248,7 +253,6 @@ export async function table(tokens) {
     tbody_open: () => state.push("tbody"),
     thead_close: () => state.pop(),
     tbody_close: () => state.pop(),
-
     tr_open: () => {
       currentRow = [];
     },
@@ -314,6 +318,16 @@ async function details(tokens) {
   return tokenStack;
 }
 
+function bulletList(tokens) {
+  const tokenStack = [];
+  for (let i = 0; i <= tokens.length; i++) {
+    const token = tokens[i];
+    if (token.type === "list_item_open") {
+      while (tokens[i].type !== "list_item_close") { }
+    }
+  }
+}
+
 export default async function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
   const output = [];
@@ -337,19 +351,43 @@ export default async function stylize(input) {
     if (i.type.match(/_open/)) {
       const accumulatedTokens = [];
       index++;
-      const tokenType = i.type.split("_")[0];
-      while (input[index].type !== `${tokenType}_close`) {
+      const tokenType = i.type.replace("_open", "");
+      console.log(`${input.indexOf(i)}. ${tokenType}`);
+      if (!input[index]) {
+        throw new Error(
+          Chalk.red.bold(
+            `Token at index ${index} is undefined. The length of the input array is ${input.length}`,
+          ),
+        );
+      }
+
+      while (input[index] && input[index].level !== i.level) {
         accumulatedTokens.push(input[index]);
         index++;
       }
       const handleTokens = {
         paragraph: async (tokens) => await renderInline(tokens[0]), // it's always just one inline token
         table: async (tokens) => await table(tokens),
-        heading: (tokens) => heading(tokens),
+        heading: (tokens) => heading(tokens[0]),
         div: async (tokens) => await stylize(tokens),
-        blockquote: async (tokens) => await stylize(tokens), // both div and blockquote are container tokens
+        blockquote: async (tokens) => await stylize(tokens),
+        bullet_list: async (tokens) => await stylize(tokens),
+        ordered_list: async (tokens) => await stylize(tokens),
+        list_item: async (tokens) => await stylize(tokens),
+        // these ones recurse because they're container blocks
         details: async (tokens) => await details(tokens),
       };
+      if (!handleTokens[tokenType]) {
+        throw new Error(
+          Chalk.red.bold(
+            "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
+          ) +
+          "\n" +
+          Chalk.dim(
+            `PS: the token type was ${tokenType}. Its index is ${index}`,
+          ),
+        );
+      }
       push.content = await handleTokens[tokenType](accumulatedTokens);
     } else if (i.type === "fence" || i.type === "code_block") {
       state.push("fence");
@@ -362,17 +400,15 @@ export default async function stylize(input) {
       push.content = "";
       state.pop();
     } else if (i.type === "inline") {
-      state.push("inline");
       push.type = "paragraph"; // since its pretty much a paragraph
       push.content = await renderInline(i);
-      state.pop();
     } else {
       throw new Error(
         Chalk.red.bold(
           "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
         ) +
         "\n" +
-        Chalk.dim(`PS: the token type was ${i.type}`),
+        Chalk.dim(`PS: the token type was ${i.type}. Its index is ${index}`),
       );
     }
 

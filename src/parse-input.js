@@ -48,6 +48,7 @@ const blockHtmlTags = new Set([
 let sanitizedText = "";
 let isPreviousTagDisallowed = false;
 const htmlToTokens = []; // the htmlParser pushes to this array
+let level = 0; // this is important!
 
 const htmlParser = new Parser({
   onopentag(name, attributes) {
@@ -123,7 +124,7 @@ function convertHtmlToMarkdownItTokens(token) {
       if (imageTokenIfPresent) {
         // if there's an image token, replace it with an inline token that
         // has the image token as a child
-        const inlineToken = new Token("inline", "", 1);
+        const inlineToken = new Token("inline", "", 0);
         inlineToken.children = [];
         inlineToken.children.push(imageTokenIfPresent);
         const indexOfImageToken = htmlTokens.indexOf(imageTokenIfPresent);
@@ -180,12 +181,17 @@ export default async function parse(input) {
 
     // here, we check for non-block elements at the top level.
     // if present, they get put into an inline token
+    // we also set the token.level here
     const inlineTokenList = [];
+    let level = 0;
     const finalProcessedTokens = [];
     for (const parsedToken of parsedTokens) {
+      if (parsedToken.nesting === -1) level--;
+      parsedToken.level = level;
+      if (parsedToken.nesting === 1) level++;
       if (parsedToken.block) {
         if (inlineTokenList.length > 0) {
-          const inlineToken = new Token("inline", "", 1);
+          const inlineToken = new Token("inline", "", 0);
           inlineToken.block = true;
           const inlineTokens = inlineTokenList.splice(0); // this empties inlineTokenList
           inlineToken.children = inlineTokens;
@@ -195,12 +201,6 @@ export default async function parse(input) {
       } else if (!parsedToken.block) {
         inlineTokenList.push(parsedToken);
       }
-    }
-    // after this for loop, there might still be tokens in inlineTokenList
-    if (inlineTokenList.length > 0) {
-      const inlineToken = new Token("inline", "", 1);
-      const inlineTokens = inlineTokenList.splice(0); // this empties inlineTokenList
-      inlineToken.children = inlineTokens;
     }
 
     state.tokens = finalProcessedTokens;

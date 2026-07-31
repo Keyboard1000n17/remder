@@ -186,6 +186,7 @@ export default async function parse(input) {
       if (parsedToken.block) {
         if (inlineTokenList.length > 0) {
           const inlineToken = new Token("inline", "", 1);
+          inlineToken.block = true;
           const inlineTokens = inlineTokenList.splice(0); // this empties inlineTokenList
           inlineToken.children = inlineTokens;
           finalProcessedTokens.push(inlineToken);

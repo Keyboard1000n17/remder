@@ -286,6 +286,34 @@ export async function table(tokens) {
   return tableRows;
 }
 
+async function details(tokens) {
+  const tokenStack = [];
+  if (tokens[0].type === "summary_open") {
+    tokenStack.push({
+      type: "summary",
+      content: await renderInline(tokens[1]),
+      properties: {},
+    });
+    tokenStack.push({
+      type: "content",
+      content: await stylize(tokens.slice(3)),
+      properties: {},
+    });
+  } else {
+    tokenStack.push({
+      type: "summary",
+      content: "Details",
+      properties: {},
+    });
+    tokenStack.push({
+      type: "content",
+      content: await stylize(tokens),
+      properties: {},
+    });
+  }
+  return tokenStack;
+}
+
 export default async function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
   const output = [];
@@ -306,77 +334,6 @@ export default async function stylize(input) {
       }
     }
 
-    // HEADING
-    /* if (i.type === "heading_open") {
-      state.push("heading");
-      push.type = "heading";
-      index++;
-      if (input[index].type === "inline") {
-        push.content = heading(input[index]);
-      }
-      index++;
-      if (input[index].type === "heading_close") state.pop();
-    }
-
-    // PARAGRAPH
-    else if (i.type === "paragraph_open") {
-      state.push("paragraph");
-      push.type = "paragraph";
-      index++;
-      if (input[index].type === "inline") {
-        push.content = await renderInline(input[index]);
-      }
-      index++;
-      // after this index++, the token type will be "paragraph_close"
-      state.pop();
-    }
-
-    // CODE BLOCK
-    else if (i.type === "fence" || i.type === "code_block") {
-      state.push("fence");
-      push.type = "codeBlock";
-      push.content = await codeBlock(i);
-      state.pop(); // pops off "fence"
-    }
-
-    // HORIZONTAL RULE
-    else if (i.type === "hr") {
-      state.push("thematic-break");
-      push.type = "thematic-break";
-      push.content = "";
-      state.pop();
-    }
-
-    // TABLE
-    else if (i.type === "table_open") {
-      state.push("table");
-      push.type = "table";
-      const tableTokens = [];
-      while (input[index].type !== "table_close") {
-        tableTokens.push(input[index]);
-        index++;
-      }
-      if (input[index].type === "table_close") tableTokens.push(input[index]);
-      push.content = await table(tableTokens);
-    }
-
-    // DIV
-    else if (i.type === "div_open") {
-      state.push("div");
-      push.type = "div";
-      const divChildren = [];
-      index++;
-      // get that div_open token out, if we put div_open
-      // in divChilren it infinitely recurses
-      while (input[index] && input[index].type !== "div_close") {
-        divChildren.push(input[index]);
-        index++;
-      }
-      // index++;
-      const processedDivChildren = await stylize(divChildren);
-      push.content = processedDivChildren;
-      state.pop();
-    } */
     if (i.type.match(/_open/)) {
       const accumulatedTokens = [];
       index++;
@@ -390,11 +347,25 @@ export default async function stylize(input) {
         table: async (tokens) => await table(tokens),
         heading: (tokens) => heading(tokens),
         div: async (tokens) => await stylize(tokens),
+        blockquote: async (tokens) => await stylize(tokens), // both div and blockquote are container tokens
+        details: async (tokens) => await details(tokens),
       };
-      push.content = await stylize(accumulatedTokens);
+      push.content = await handleTokens[tokenType](accumulatedTokens);
+    } else if (i.type === "fence" || i.type === "code_block") {
+      state.push("fence");
+      push.type = "codeBlock";
+      push.content = await codeBlock(i);
+      state.pop(); // pops off "fence"
+    } else if (i.type === "hr") {
+      state.push("thematic-break");
+      push.type = "thematic-break";
+      push.content = "";
+      state.pop();
     } else if (i.type === "inline") {
       state.push("inline");
-      renderInline(i);
+      push.type = "paragraph"; // since its pretty much a paragraph
+      push.content = await renderInline(i);
+      state.pop();
     } else {
       throw new Error(
         Chalk.red.bold(

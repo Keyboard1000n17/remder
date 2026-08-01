@@ -5,61 +5,75 @@ import got from "got";
 import { Resvg } from "@resvg/resvg-js";
 import { FontStyle } from "@shikijs/vscode-textmate";
 import * as Shiki from "shiki";
+import { parseArgs } from "node:util";
+
+const args = parseArgs({
+  args: Bun.argv,
+  options: {
+    disableImages: {
+      type: "boolean",
+    },
+  },
+  allowPositionals: false,
+});
 
 let state = []; // global var
 
 const glyphs = await Bun.file("./chars.json").json();
 
-// NOTE: the function is being exported here temporarily for testing
-export async function image(token, areThereOtherTokens) {
-  // token here should be the image token inside an inline token
-  if (token.type !== "image") throw new Error("WRONG TOKEN IDIOT DEV");
-  const getFileBuffer = async (path) => {
+class Image {
+  static async getBuffer(path) {
     try {
-      return path.startsWith("http")
-        ? await got(path).buffer()
+      return URL.canParse(path)
+        ? await got(path).rawBody()
         : Bun.file(path).arrayBuffer();
     } catch (err) {
       return null;
     }
-  };
-  const path = token.attrGet("src");
-  const alt = token.attrGet("alt");
-  const buffer = await getFileBuffer(path);
-  const opts = {
-    preferNativeRender: /tmux|screen|xterm|alacritty/.test(process.env.term),
-  };
-  if (areThereOtherTokens) {
-    opts.height = token.attrGet("height") || 1;
-  } else {
-    const isWidthDefined = token.attrGet("width");
-    opts.width = isWidthDefined
-      ? isWidthDefined
-      : process.stdout.columns / 2 || 40;
   }
-
-  const imgObj = {
-    buffer: buffer,
-    opts: opts,
-    imageAlt: alt,
-    shouldDisplayImage: !(
-      /^screen$/.test(process.env.TERM) || process.env.NO_COLOR
-    ),
-    isGif: /\.gif$/.test(path),
-  };
-
-  imgObj.prototype.render = async (imgObj) => {
-    if (imgObj.shouldDisplayImage) {
-      const image = await (imgObj.isGif
-        ? terminalImage.gifBuffer(imgObj.buffer, opts)
-        : terminalImage.buffer(imgObj.buffer, opts));
-      return image;
+  constructor(path, imageAlt, opts, shouldDisplayImage) {
+    return (async (path, imageAlt, opts, shouldDisplayImage) => {
+      this.buffer = await getBuffer(path);
+      this.opts = opts;
+      this.imageAlt = imageAlt;
+      this.shouldDisplayImage = shouldDisplayImage;
+    })(path, opts, imageAlt, shouldDisplayImage);
+  }
+  static async render(image) {
+    if (image.shouldDisplayImage) {
+      const path = image.path;
+      if (path.match(/\.gif$/)) {
+        return terminalImage.gifBuffer(image.buffer, image.opts);
+      } else if (path.match(/\.svg$/)) {
+        return new Resvg(image.buffer).render().asPng();
+      } else {
+        return terminalImage.buffer(image.buffer, image.opts);
+      }
     } else {
       return Chalk.dim(imgObj.imageAlt);
     }
+  }
+}
+
+export async function image(token, areThereOtherTokens) {
+  // token here should be the image token inside an inline token
+  if (token.type !== "image")
+    throw new Error(
+      Chalk.red.bold(`Wrong token type: expected image but got ${token.type}`),
+    );
+  const path = token.attrGet("src");
+  const alt = token.attrGet("alt");
+  const terminalImageOpts = {
+    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(process.env.term),
   };
-  // TODO: turn imgObj into a class so we can use prototypes
-  return imgObj;
+  if (areThereOtherTokens) {
+    terminalImageOpts.height = token.attrGet("height") || 1;
+  } else {
+    terminalImageOpts.width =
+      token.attrGet("width") || process.stdout.columns / 2 || 40;
+  }
+  const shouldDisplayImage = "";
+  return new Image(path, alt, terminalImageOpts, shouldDisplayImage);
 }
 
 function getStyle(type) {

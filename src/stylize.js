@@ -12,9 +12,10 @@ const args = parseArgs({
   options: {
     disableImages: {
       type: "boolean",
+      default: false,
     },
   },
-  allowPositionals: false,
+  allowPositionals: true,
 });
 
 let state = []; // global var
@@ -22,35 +23,43 @@ let state = []; // global var
 const glyphs = await Bun.file("./chars.json").json();
 
 class Image {
-  static async getBuffer(path) {
+  static async #getBuffer(path) {
     try {
       return URL.canParse(path)
-        ? await got(path).rawBody()
+        ? await got(path).buffer()
         : Bun.file(path).arrayBuffer();
     } catch (err) {
       return null;
     }
   }
   constructor(path, imageAlt, opts, shouldDisplayImage) {
-    return (async (path, imageAlt, opts, shouldDisplayImage) => {
-      this.buffer = await getBuffer(path);
-      this.opts = opts;
-      this.imageAlt = imageAlt;
-      this.shouldDisplayImage = shouldDisplayImage;
-    })(path, opts, imageAlt, shouldDisplayImage);
+    this.path = path;
+    this.opts = opts;
+    this.buffer = Image.#getBuffer(path);
+    this.imageAlt = imageAlt;
+    this.shouldDisplayImage = shouldDisplayImage;
   }
-  static async render(image) {
-    if (image.shouldDisplayImage) {
-      const path = image.path;
+  async render() {
+    if (this.shouldDisplayImage) {
+      const path = this.path;
+      const buffer = await this.buffer;
       if (path.match(/\.gif$/)) {
-        return terminalImage.gifBuffer(image.buffer, image.opts);
+        return terminalImage.gifBuffer(buffer, this.opts);
       } else if (path.match(/\.svg$/)) {
-        return new Resvg(image.buffer).render().asPng();
+        return terminalImage.buffer(
+          new Resvg(buffer).render().asPng(),
+          this.opts,
+        );
+      } else if (path.match(/\.webp$/)) {
+        return terminalImage.buffer(
+          await new Bun.Image(buffer).png().buffer(),
+          this.opts,
+        );
       } else {
-        return terminalImage.buffer(image.buffer, image.opts);
+        return terminalImage.buffer(buffer, this.opts);
       }
     } else {
-      return Chalk.dim(imgObj.imageAlt);
+      return Chalk.dim(this.imageAlt);
     }
   }
 }
@@ -64,7 +73,7 @@ export async function image(token, areThereOtherTokens) {
   const path = token.attrGet("src");
   const alt = token.attrGet("alt");
   const terminalImageOpts = {
-    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(process.env.term),
+    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(process.env.TERM),
   };
   if (areThereOtherTokens) {
     terminalImageOpts.height = token.attrGet("height") || 1;
@@ -72,7 +81,7 @@ export async function image(token, areThereOtherTokens) {
     terminalImageOpts.width =
       token.attrGet("width") || process.stdout.columns / 2 || 40;
   }
-  const shouldDisplayImage = "";
+  const shouldDisplayImage = !args.values.disableImages;
   return new Image(path, alt, terminalImageOpts, shouldDisplayImage);
 }
 

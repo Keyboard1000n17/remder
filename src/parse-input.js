@@ -15,6 +15,9 @@ const aliases = {
   h4: "heading",
   h5: "heading",
   h6: "heading",
+  ul: "bullet_list",
+  ol: "ordered_list",
+  li: "list_item",
 };
 const blockHtmlTags = new Set([
   "blockquote",
@@ -157,7 +160,7 @@ function convertHtmlToMarkdownItTokens(token) {
   }
 }
 
-export default async function parse(input) {
+export default function parse(input) {
   const md = new MarkdownIt({
     langPrefix: "langauge-",
     html: true,
@@ -193,8 +196,8 @@ export default async function parse(input) {
         if (inlineTokenList.length > 0) {
           const inlineToken = new Token("inline", "", 0);
           inlineToken.block = true;
-          const inlineTokens = inlineTokenList.splice(0); // this empties inlineTokenList
-          inlineToken.children = inlineTokens;
+          inlineToken.children = inlineTokenList.splice(0); // this empties inlineTokenList
+          inlineToken.level = inlineToken.children[0].level;
           finalProcessedTokens.push(inlineToken);
         }
         finalProcessedTokens.push(parsedToken);
@@ -206,6 +209,6 @@ export default async function parse(input) {
     state.tokens = finalProcessedTokens;
   });
   const modifiedInput = input.replaceAll(/<br( \/)?>/g, "\n\n");
-  const tokens = md.parse(modifiedInput);
+  const tokens = md.parse(modifiedInput, {});
   return tokens;
 }

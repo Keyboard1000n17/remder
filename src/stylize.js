@@ -23,6 +23,13 @@ let state = []; // global var
 const glyphs = await Bun.file("./chars.json").json();
 
 class Image {
+  constructor(path, imageAlt, opts, shouldDisplayImage) {
+    this.path = path;
+    this.opts = opts;
+    this.buffer = Image.#getBuffer(path);
+    this.imageAlt = imageAlt;
+    this.shouldDisplayImage = shouldDisplayImage;
+  }
   static async #getBuffer(path) {
     try {
       return URL.canParse(path)
@@ -31,13 +38,6 @@ class Image {
     } catch (err) {
       return null;
     }
-  }
-  constructor(path, imageAlt, opts, shouldDisplayImage) {
-    this.path = path;
-    this.opts = opts;
-    this.buffer = Image.#getBuffer(path);
-    this.imageAlt = imageAlt;
-    this.shouldDisplayImage = shouldDisplayImage;
   }
   async render() {
     if (this.shouldDisplayImage) {
@@ -78,8 +78,7 @@ export async function image(token, areThereOtherTokens) {
   if (areThereOtherTokens) {
     terminalImageOpts.height = token.attrGet("height") || 1;
   } else {
-    terminalImageOpts.width =
-      token.attrGet("width") || process.stdout.columns / 2 || 40;
+    terminalImageOpts.width = token.attrGet("width") || "50%";
   }
   const shouldDisplayImage = !args.values.disableImages;
   return new Image(path, alt, terminalImageOpts, shouldDisplayImage);
@@ -166,7 +165,6 @@ async function renderInline(token) {
     if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
-      console.log(state);
       for (let j = nesting.length - 1; j >= 0; j--) {
         if (!inline[nesting[j]])
           throw new Error(
@@ -187,8 +185,12 @@ async function renderInline(token) {
 }
 
 function heading(token) {
-  if (token.type !== "inline")
-    throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
+  if (token?.type !== "inline")
+    throw new Error(
+      Chalk.red.bold(
+        `Wrong token type: expected type inline but got ${token?.type}`,
+      ),
+    );
   let builtString = "";
   const links = [];
   let index = 0;
@@ -285,11 +287,11 @@ export async function table(tokens) {
     },
 
     th_open: (token) => {
-      const alignMatch = token.attrGet("style").match(/text-align:\s*(\w+)/);
+      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
       currentAlign = alignMatch ? alignMatch[1] : "center";
     },
     td_open: (token) => {
-      const alignMatch = token.attrGet("style").match(/text-align:\s*(\w+)/);
+      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
       currentAlign = alignMatch ? alignMatch[1] : "left";
     },
 
@@ -341,16 +343,6 @@ async function details(tokens) {
   return tokenStack;
 }
 
-function bulletList(tokens) {
-  const tokenStack = [];
-  for (let i = 0; i <= tokens.length; i++) {
-    const token = tokens[i];
-    if (token.type === "list_item_open") {
-      while (tokens[i].type !== "list_item_close") { }
-    }
-  }
-}
-
 export default async function stylize(input) {
   // input is an array returned by `parse()` in `parse-input.js`
   const output = [];
@@ -375,7 +367,6 @@ export default async function stylize(input) {
       const accumulatedTokens = [];
       index++;
       const tokenType = i.type.replace("_open", "");
-      console.log(`${input.indexOf(i)}. ${tokenType}`);
       if (!input[index]) {
         throw new Error(
           Chalk.red.bold(
@@ -399,6 +390,30 @@ export default async function stylize(input) {
         list_item: async (tokens) => await stylize(tokens),
         // these ones recurse because they're container blocks
         details: async (tokens) => await details(tokens),
+        pre: (tokens) => {
+          let builtString = "";
+          for (const token of tokens) {
+            if (token.type.match(/_open/)) {
+              builtString += `<${token.tag}>`;
+            } else if (token.type.match(/_close/)) {
+              builtString += `</${token.tag}>`;
+            } else if (token.content.length > 0) {
+              builtString += token.content;
+            }
+            if (token.children) {
+              for (const child of token.children) {
+                if (child.type.match(/_open/)) {
+                  builtString += `<${child.tag}>`;
+                } else if (child.type.match(/_close/)) {
+                  builtString += `</${child.tag}>`;
+                } else if (child.content.length > 0) {
+                  builtString += child.content;
+                }
+              }
+            }
+          }
+          return builtString;
+        },
       };
       if (!handleTokens[tokenType]) {
         throw new Error(

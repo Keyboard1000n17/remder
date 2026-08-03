@@ -93,18 +93,17 @@ function getStyle(type) {
     case "em_open":
       style = "italic";
       break;
-    case "link_open":
-      style = "link";
-      break;
     case "s_open":
       style = "strikethrough";
       break;
     case "code_inline":
       style = "code";
       break;
-    default:
-      style = "plain";
+    case "ins_open":
+      style = "underline";
       break;
+    default:
+      throw new Error(Chalk.red.bold(`getStyle() failed: what is ${type}?`));
   }
   return style;
 }
@@ -113,6 +112,7 @@ const inline = {
   bold: (text) => Chalk.bold(text),
   italic: (text) => Chalk.italic(text),
   strikethrough: (text) => Chalk.strikethrough(text),
+  underline: (text) => Chalk.underline(text),
   code: (text) => Chalk.bgBlack(text),
   plain: (text) => text,
   text: (text) => text,
@@ -123,35 +123,40 @@ async function renderInline(token) {
   if (token.type !== "inline")
     throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
 
-  state.push("inline");
   const styled = [];
+  state.push("inline");
 
   let i = 0;
   let text = "";
   while (i < token.children.length) {
     const child = token.children[i];
     const type = child.type;
-
-    if (/_open/.test(type)) {
-      state.push(getStyle(type));
-    }
-
-    if (/_close/.test(type)) {
-      state.pop();
-    }
-
     if (type === "link_open") {
       // handle links
       const linkUrl = child.attrGet("href");
       i++;
       const linkText = token.children[i].content;
-      styled.push({
-        type: "link",
-        content: terminalLink(linkText, linkUrl, { fallback: false }),
-      });
-    }
-
-    if (type === "image") {
+      text += Chalk.underline(terminalLink(linkText, linkUrl));
+    } else if (type === "abbr_open") {
+      const abbreviation = child.attrGet("title");
+      i++;
+      const abbreviatedText = token.children[i].content;
+      if (abbreviation.length > 0) {
+        text += `${abbreviatedText} (${abbreviation})`;
+      } else {
+        text += abbreviatedText;
+      }
+      text +=
+        abbreviation?.length > 0
+          ? `${abbreviatedText} (${abbreviation})`
+          : abbreviatedText;
+    } else if (/_open/.test(type)) {
+      state.push(getStyle(type));
+      console.log("STATE:", state);
+    } else if (/_close/.test(type)) {
+      state.pop();
+      console.log("STATE:", state);
+    } else if (type === "image") {
       // handle images
       styled.push({ type: "text", content: text });
       text = "";
@@ -160,20 +165,29 @@ async function renderInline(token) {
         type: "image",
         content: await image(child, areThereOtherTokens),
       });
-    }
-
-    if (type === "text") {
+    } else if (type === "softbreak") {
+      text += " ";
+    } else if (type === "code_inline") {
+      text += Chalk.bgBlack(` ${child.content} `);
+    } else if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
       for (let j = nesting.length - 1; j >= 0; j--) {
-        if (!inline[nesting[j]])
+        if (!inline[nesting[j]]) {
           throw new Error(
             Chalk.red.bold(`Inline token type ${nesting[j]} does not exist.`),
           );
+        }
         temp = inline[nesting[j]](temp);
       }
       // end for
       text += temp;
+    } else {
+      throw new Error(
+        Chalk.bold.red(
+          `Token type not recognized: you might need to add handling for "${type}" in /src/stylize.js. State was ${state}. Token index was ${i}. Token was ${JSON.stringify(token, null, 2)}`,
+        ),
+      );
     }
 
     i++;
@@ -181,6 +195,7 @@ async function renderInline(token) {
   // end for
   if (text !== "") styled.push({ type: "text", content: text });
   state.pop();
+  console.log("STATE:", state);
   return styled;
 }
 
@@ -188,7 +203,7 @@ function heading(token) {
   if (token?.type !== "inline")
     throw new Error(
       Chalk.red.bold(
-        `Wrong token type: expected type inline but got ${token?.type}`,
+        `Wrong token type: expected type inline but got ${token?.type} `,
       ),
     );
   let builtString = "";
@@ -222,7 +237,7 @@ function heading(token) {
   }
   builtString = almostStyled.join("\n");
   for (let link of links) {
-    const builtLink = `\n${link.text}: ${terminalLink(link.url, link.url, { fallback: false })}`;
+    const builtLink = `\n${link.text}: ${terminalLink(link.url, link.url, { fallback: false })} `;
     builtString += builtLink;
   }
   return builtString;
@@ -344,7 +359,7 @@ async function details(tokens) {
 }
 
 export default async function stylize(input) {
-  // input is an array returned by `parse()` in `parse-input.js`
+  // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
   let index = 0;
 
@@ -354,28 +369,34 @@ export default async function stylize(input) {
       content: "",
       properties: {},
     };
-    let i = input[index];
+    let token = input[index];
+    if (!token)
+      throw new Error(Chalk.bold.red(`Token at ${index} is not defined!!!`));
 
     // give attrs
-    if (i.attrs) {
-      for (let [key, value] of i.attrs) {
+    if (token.attrs) {
+      for (let [key, value] of token.attrs) {
         push.properties[key] = value;
       }
     }
 
-    if (i.type.match(/_open/)) {
+    if (!token.type)
+      throw new Error(
+        Chalk.bold.red(`Type of token at index ${index} is ${token?.type}!`),
+      );
+    if (token.type.match(/_open/)) {
       const accumulatedTokens = [];
       index++;
-      const tokenType = i.type.replace("_open", "");
+      const tokenType = token.type.replace("_open", "");
       if (!input[index]) {
         throw new Error(
           Chalk.red.bold(
-            `Token at index ${index} is undefined. The length of the input array is ${input.length}`,
+            `Token at index ${index} is undefined.The length of the input array is ${input.length} `,
           ),
         );
       }
 
-      while (input[index] && input[index].level !== i.level) {
+      while (input[index] && input[index].level !== token.level) {
         accumulatedTokens.push(input[index]);
         index++;
       }
@@ -390,30 +411,23 @@ export default async function stylize(input) {
         list_item: async (tokens) => await stylize(tokens),
         // these ones recurse because they're container blocks
         details: async (tokens) => await details(tokens),
+
         pre: (tokens) => {
           let builtString = "";
           for (const token of tokens) {
-            if (token.type.match(/_open/)) {
-              builtString += `<${token.tag}>`;
-            } else if (token.type.match(/_close/)) {
-              builtString += `</${token.tag}>`;
-            } else if (token.content.length > 0) {
+            if (token.content.length > 0) {
               builtString += token.content;
             }
             if (token.children) {
               for (const child of token.children) {
-                if (child.type.match(/_open/)) {
-                  builtString += `<${child.tag}>`;
-                } else if (child.type.match(/_close/)) {
-                  builtString += `</${child.tag}>`;
-                } else if (child.content.length > 0) {
+                if (child.content.length > 0) {
                   builtString += child.content;
                 }
               }
             }
           }
           return builtString;
-        },
+        }, // strange? well i couldn't bother making a separate function
       };
       if (!handleTokens[tokenType]) {
         throw new Error(
@@ -422,31 +436,36 @@ export default async function stylize(input) {
           ) +
           "\n" +
           Chalk.dim(
-            `PS: the token type was ${tokenType}. Its index is ${index}`,
+            `PS: the token type was ${tokenType}. Its index is ${index} `,
           ),
         );
       }
+      state.push(tokenType);
+      console.log("STATE:", state);
       push.content = await handleTokens[tokenType](accumulatedTokens);
-    } else if (i.type === "fence" || i.type === "code_block") {
+      state.pop();
+    } else if (token.type === "fence" || token.type === "code_block") {
       state.push("fence");
       push.type = "codeBlock";
-      push.content = await codeBlock(i);
+      push.content = await codeBlock(token);
       state.pop(); // pops off "fence"
-    } else if (i.type === "hr") {
+    } else if (token.type === "hr") {
       state.push("thematic-break");
       push.type = "thematic-break";
       push.content = "";
       state.pop();
-    } else if (i.type === "inline") {
+    } else if (token.type === "inline") {
       push.type = "paragraph"; // since its pretty much a paragraph
-      push.content = await renderInline(i);
+      push.content = await renderInline(token);
     } else {
       throw new Error(
         Chalk.red.bold(
           "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
         ) +
         "\n" +
-        Chalk.dim(`PS: the token type was ${i.type}. Its index is ${index}`),
+        Chalk.dim(
+          `PS: the token type was ${token.type}. Its index is ${index} `,
+        ),
       );
     }
 

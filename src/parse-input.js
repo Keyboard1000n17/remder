@@ -2,23 +2,28 @@ import MarkdownIt from "markdown-it";
 import GithubAlerts from "markdown-it-github-alerts";
 import { Parser } from "htmlparser2";
 import Token from "markdown-it/lib/token.mjs";
-const aliases = {
-  p: "paragraph",
-  b: "strong",
-  i: "em",
-  var: "em", // var is a valid tag in html apparently
-  del: "s",
-  a: "link",
-  h1: "heading",
-  h2: "heading",
-  h3: "heading",
-  h4: "heading",
-  h5: "heading",
-  h6: "heading",
-  ul: "bullet_list",
-  ol: "ordered_list",
-  li: "list_item",
-};
+
+const aliases = new Map(
+  Object.entries({
+    p: "paragraph",
+    b: "strong",
+    i: "em",
+    var: "em", // var is a valid tag in html apparently
+    del: "s",
+    a: "link",
+    h1: "heading",
+    h2: "heading",
+    h3: "heading",
+    h4: "heading",
+    h5: "heading",
+    h6: "heading",
+    ul: "bullet_list",
+    ol: "ordered_list",
+    li: "list_item",
+    u: "ins",
+    img: "image",
+  }),
+);
 const blockHtmlTags = new Set([
   "blockquote",
   "details",
@@ -46,12 +51,12 @@ const blockHtmlTags = new Set([
   "tfoot",
   "thead",
   "tr",
+  "th",
   "td",
 ]);
 let sanitizedText = "";
 let isPreviousTagDisallowed = false;
 const htmlToTokens = []; // the htmlParser pushes to this array
-let level = 0; // this is important!
 
 const htmlParser = new Parser({
   onopentag(name, attributes) {
@@ -65,22 +70,13 @@ const htmlParser = new Parser({
       sanitizedText += `<${name}>`;
     } else {
       isPreviousTagDisallowed = false;
-      openingToken.type =
-        name === "img" ? "image" : `${aliases[name] ?? name}_open`;
+      openingToken.type = name === `${aliases.get(name) ?? name}_open`;
       // set the attributes
       if (Object.keys(attributes).length > 0) {
         openingToken.attrs = [];
         for (const [key, value] of Object.entries(attributes)) {
           openingToken.attrSet(key, value);
         }
-      }
-      // if its an image token, add a kid with type = text to the children array
-      if (name === "img") {
-        const textToken = new Token("text", "", 0);
-        textToken.content = attributes.alt;
-        openingToken.content = attributes.alt; // markdown-it does this shit for some reason
-        openingToken.children = [];
-        openingToken.children.push(textToken);
       }
 
       openingToken.block = blockHtmlTags.has(name);
@@ -91,7 +87,6 @@ const htmlParser = new Parser({
   ontext(text) {
     if (isPreviousTagDisallowed) {
       sanitizedText += text;
-      return;
     } else {
       const textToken = new Token("text", "", 0);
       textToken.content = text;
@@ -106,7 +101,7 @@ const htmlParser = new Parser({
       sanitizedText += `</${name}>`;
     } else {
       const closingToken = new Token(
-        `${aliases[name] ?? name}_close`,
+        `${aliases.get(name) ?? name}_close`,
         name,
         -1,
       );
@@ -121,18 +116,6 @@ function convertHtmlToMarkdownItTokens(token) {
     case "html_block": {
       htmlParser.write(token.content);
       const htmlTokens = htmlToTokens.splice(0);
-      const imageTokenIfPresent = htmlTokens.find(
-        (token) => token.type === "image",
-      );
-      if (imageTokenIfPresent) {
-        // if there's an image token, replace it with an inline token that
-        // has the image token as a child
-        const inlineToken = new Token("inline", "", 0);
-        inlineToken.children = [];
-        inlineToken.children.push(imageTokenIfPresent);
-        const indexOfImageToken = htmlTokens.indexOf(imageTokenIfPresent);
-        htmlTokens.splice(indexOfImageToken, 1, inlineToken);
-      }
       return htmlTokens;
     }
     case "inline": {
@@ -188,7 +171,8 @@ export default function parse(input) {
     const inlineTokenList = [];
     let level = 0;
     const finalProcessedTokens = [];
-    for (const parsedToken of parsedTokens) {
+    for (let i = 0; i < parsedTokens.length; i++) {
+      const parsedToken = parsedTokens[i];
       if (parsedToken.nesting === -1) level--;
       parsedToken.level = level;
       if (parsedToken.nesting === 1) level++;
@@ -196,6 +180,19 @@ export default function parse(input) {
         if (inlineTokenList.length > 0) {
           const inlineToken = new Token("inline", "", 0);
           inlineToken.block = true;
+          const codeTokenIndex = inlineTokenList.findIndex(
+            (token) => token.type === "code_open",
+          );
+          if (
+            codeTokenIndex !== -1 &&
+            inlineTokenList[codeTokenIndex + 1].type === "text" &&
+            inlineTokenList[codeTokenIndex + 2].type === "code_close"
+          ) {
+            const codeToken = new Token("code_inline", "code", 0);
+            codeToken.content = inlineTokenList[codeTokenIndex + 1].content;
+            codeToken.block = false;
+            inlineTokenList.splice(codeTokenIndex, 3, codeToken);
+          } // this ugly thing replaces a sequence of [code_open, text, code_close] with a single `code_inline element`
           inlineToken.children = inlineTokenList.splice(0); // this empties inlineTokenList
           inlineToken.level = inlineToken.children[0].level;
           finalProcessedTokens.push(inlineToken);
@@ -204,6 +201,14 @@ export default function parse(input) {
       } else if (!parsedToken.block) {
         inlineTokenList.push(parsedToken);
       }
+    }
+    // just in case if inlineTokenList isn't empty
+    if (inlineTokenList.length > 0) {
+      const inlineToken = new Token("inline", "", 0);
+      inlineToken.block = true;
+      inlineToken.children = inlineTokenList.splice(0); // this empties inlineTokenList
+      inlineToken.level = inlineToken.children[0].level;
+      finalProcessedTokens.push(inlineToken);
     }
 
     state.tokens = finalProcessedTokens;

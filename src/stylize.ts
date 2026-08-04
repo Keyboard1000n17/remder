@@ -4,6 +4,7 @@ import terminalImage from "terminal-image";
 import got from "got";
 import { Resvg } from "@resvg/resvg-js";
 import { FontStyle } from "@shikijs/vscode-textmate";
+import type Token from "markdown-it/lib/token.mjs";
 import * as Shiki from "shiki";
 import { parseArgs } from "node:util";
 
@@ -18,19 +19,21 @@ const args = parseArgs({
   allowPositionals: true,
 });
 
-let state = []; // global var
+let state: string[] = []; // global var
 
 const glyphs = await Bun.file("./chars.json").json();
 
 class Image {
-  constructor(path, imageAlt, opts, shouldDisplayImage) {
-    this.path = path;
-    this.opts = opts;
+  public buffer: any;
+  constructor(
+    public path: string,
+    public imageAlt: string,
+    public opts: object,
+    public shouldDisplayImage: boolean,
+  ) {
     this.buffer = Image.#getBuffer(path);
-    this.imageAlt = imageAlt;
-    this.shouldDisplayImage = shouldDisplayImage;
   }
-  static async #getBuffer(path) {
+  static async #getBuffer(path: string) {
     try {
       return URL.canParse(path)
         ? await got(path).buffer()
@@ -64,7 +67,9 @@ class Image {
   }
 }
 
-export async function image(token, areThereOtherTokens) {
+const env = process.env;
+
+export async function image(token: Token, areThereOtherTokens: boolean) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
     throw new Error(
@@ -73,7 +78,7 @@ export async function image(token, areThereOtherTokens) {
   const path = token.attrGet("src");
   const alt = token.attrGet("alt");
   const terminalImageOpts = {
-    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(process.env.TERM),
+    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(env.TERM),
   };
   if (areThereOtherTokens) {
     terminalImageOpts.height = token.attrGet("height") || 1;
@@ -84,41 +89,34 @@ export async function image(token, areThereOtherTokens) {
   return new Image(path, alt, terminalImageOpts, shouldDisplayImage);
 }
 
-function getStyle(type) {
-  let style = "";
+function getStyle(type: string): keyof typeof inline {
   switch (type) {
     case "strong_open":
-      style = "bold";
-      break;
+      return "bold";
     case "em_open":
-      style = "italic";
-      break;
+      return "italic";
     case "s_open":
-      style = "strikethrough";
-      break;
+      return "strikethrough";
     case "code_inline":
-      style = "code";
-      break;
+      return "code";
     case "ins_open":
-      style = "underline";
-      break;
+      return "underline";
     default:
       throw new Error(Chalk.red.bold(`getStyle() failed: what is ${type}?`));
   }
-  return style;
 }
 
 const inline = {
-  bold: (text) => Chalk.bold(text),
-  italic: (text) => Chalk.italic(text),
-  strikethrough: (text) => Chalk.strikethrough(text),
-  underline: (text) => Chalk.underline(text),
-  code: (text) => Chalk.bgBlack(text),
-  plain: (text) => text,
-  text: (text) => text,
+  bold: (text: string) => Chalk.bold(text),
+  italic: (text: string) => Chalk.italic(text),
+  strikethrough: (text: string) => Chalk.strikethrough(text),
+  underline: (text: string) => Chalk.underline(text),
+  code: (text: string) => Chalk.bgBlack(text),
+  plain: (text: string) => text,
+  text: (text: string) => text,
 };
 
-async function renderInline(token) {
+async function renderInline(token: Token) {
   // token is a token with type = "inline"
   if (token.type !== "inline")
     throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
@@ -128,34 +126,45 @@ async function renderInline(token) {
 
   let i = 0;
   let text = "";
+  if (!token.children)
+    throw new Error(`Something went wrong. This shouldn't happen.`);
   while (i < token.children.length) {
     const child = token.children[i];
+    if (!child) throw new Error(`Something went wrong. This shouldn't happen.`);
     const type = child.type;
+
     if (type === "link_open") {
-      // handle links
-      const linkUrl = child.attrGet("href");
+      const linkUrl = child.attrGet("href") ?? "";
       i++;
-      const linkText = token.children[i].content;
+      const linkTextToken = token.children[i];
+      if (!linkTextToken)
+        throw new Error(
+          Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+        );
+      const linkText = linkTextToken.content;
       text += Chalk.underline(terminalLink(linkText, linkUrl));
     } else if (type === "abbr_open") {
       const abbreviation = child.attrGet("title");
       i++;
-      const abbreviatedText = token.children[i].content;
-      if (abbreviation.length > 0) {
+      const abbrTextToken = token.children[i];
+      if (!abbrTextToken)
+        throw new Error(
+          Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+        );
+      const abbreviatedText = abbrTextToken.content ?? "";
+      if (abbreviation && abbreviation.length > 0) {
         text += `${abbreviatedText} (${abbreviation})`;
       } else {
         text += abbreviatedText;
       }
       text +=
-        abbreviation?.length > 0
+        abbreviation && abbreviation.length > 0
           ? `${abbreviatedText} (${abbreviation})`
           : abbreviatedText;
     } else if (/_open/.test(type)) {
       state.push(getStyle(type));
-      console.log("STATE:", state);
     } else if (/_close/.test(type)) {
       state.pop();
-      console.log("STATE:", state);
     } else if (type === "image") {
       // handle images
       styled.push({ type: "text", content: text });
@@ -172,13 +181,13 @@ async function renderInline(token) {
     } else if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
-      for (let j = nesting.length - 1; j >= 0; j--) {
-        if (!inline[nesting[j]]) {
+      for (const style of nesting) {
+        if (!inline[style]) {
           throw new Error(
-            Chalk.red.bold(`Inline token type ${nesting[j]} does not exist.`),
+            Chalk.red.bold(`Inline token type ${style} does not exist.`),
           );
         }
-        temp = inline[nesting[j]](temp);
+        temp = inline[style](temp);
       }
       // end for
       text += temp;

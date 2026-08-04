@@ -24,6 +24,8 @@ const aliases = new Map(
     ol: "ordered_list",
     li: "list_item",
     u: "ins",
+    dfn: "abbr",
+    samp: "kbd",
   }),
 );
 const blockHtmlTags = new Set([

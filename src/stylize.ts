@@ -139,6 +139,8 @@ const inline = {
   strikethrough: (text: string) => Chalk.strikethrough(text),
   underline: (text: string) => Chalk.underline(text),
   code: (text: string) => Chalk.bgBlack(text),
+  kbd: (text: string) => Chalk.bgBlack(text),
+  mark: (text: string) => Chalk.bgYellow(text),
   plain: (text: string) => text,
   text: (text: string) => text,
 };
@@ -457,8 +459,11 @@ export default async function stylize(input: Token[]) {
         bullet_list: async (tokens: Token[]) => await stylize(tokens),
         ordered_list: async (tokens: Token[]) => await stylize(tokens),
         list_item: async (tokens: Token[]) => await stylize(tokens),
+        ruby: async (tokens: Token[]) => await stylize(tokens),
         // these ones recurse because they're container blocks
         details: async (tokens: Token[]) => await details(tokens),
+        rp: async (tokens: Token[]) => await renderInline(tokens[0]!),
+        rt: async (tokens: Token[]) => await renderInline(tokens[0]!),
 
         pre: async (tokens: Token[]) => {
           let builtString = "";

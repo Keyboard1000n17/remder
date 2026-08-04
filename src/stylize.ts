@@ -3,7 +3,6 @@ import terminalLink from "terminal-link";
 import terminalImage from "terminal-image";
 import got from "got";
 import { Resvg } from "@resvg/resvg-js";
-import { FontStyle } from "@shikijs/vscode-textmate";
 import type Token from "markdown-it/lib/token.mjs";
 import * as Shiki from "shiki";
 import { parseArgs } from "node:util";
@@ -19,9 +18,34 @@ const args = parseArgs({
   allowPositionals: true,
 });
 
-let state: string[] = []; // global var
-
 const glyphs = await Bun.file("./chars.json").json();
+
+type InlineStyle = keyof typeof inline;
+type StateEntry = string | InlineStyle;
+type TerminalImageOpts = {
+  preferNativeRender?: boolean;
+  width?: string | number;
+  height?: string | number;
+};
+type HeadingObject = {
+  headingTextArray: string[][];
+  links: string;
+};
+type ProcessedToken = {
+  type: string;
+  content: any;
+  properties: {
+    [type: string]: any;
+  };
+};
+const enum FontStyle {
+  Italic = 1,
+  Bold = 2,
+  Underline = 4,
+  Strikethrough = 8,
+}
+
+let state: StateEntry[] = []; // global var
 
 class Image {
   public buffer: any;
@@ -67,7 +91,9 @@ class Image {
   }
 }
 
-const env = process.env;
+const term: string | undefined = process.env.TERM;
+if (term === undefined)
+  throw new Error(`A TUI can not be run in the background!`);
 
 export async function image(token: Token, areThereOtherTokens: boolean) {
   // token here should be the image token inside an inline token
@@ -76,9 +102,10 @@ export async function image(token: Token, areThereOtherTokens: boolean) {
       Chalk.red.bold(`Wrong token type: expected image but got ${token.type}`),
     );
   const path = token.attrGet("src");
-  const alt = token.attrGet("alt");
-  const terminalImageOpts = {
-    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(env.TERM),
+  if (!path) throw new Error("Something went wrong, this shouldn't happen!");
+  const alt = token.attrGet("alt") || "";
+  const terminalImageOpts: TerminalImageOpts = {
+    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(term!),
   };
   if (areThereOtherTokens) {
     terminalImageOpts.height = token.attrGet("height") || 1;
@@ -181,8 +208,8 @@ async function renderInline(token: Token) {
     } else if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
-      for (const style of nesting) {
-        if (!inline[style]) {
+      for (const style of nesting as (keyof typeof inline)[]) {
+        if (!(style in inline)) {
           throw new Error(
             Chalk.red.bold(`Inline token type ${style} does not exist.`),
           );
@@ -208,24 +235,31 @@ async function renderInline(token: Token) {
   return styled;
 }
 
-function heading(token) {
+function heading(token: Token) {
   if (token?.type !== "inline")
     throw new Error(
       Chalk.red.bold(
         `Wrong token type: expected type inline but got ${token?.type} `,
       ),
     );
-  let builtString = "";
-  const links = [];
+  const links: { text: string; url: string }[] = [];
   let index = 0;
   let text = "";
-  while (index < token.children.length) {
-    const child = token.children[index];
+  const children: Token[] | null = token.children;
+  if (!children)
+    throw new Error("Something went wrong, this shouldn't happen.");
+  while (index < children.length) {
+    const child = children[index];
+    if (!child) throw new Error("Something went wrong, this shouldn't happen.");
     if (child.type === "link_open") {
-      const linkUrl = child.attrGet("href");
+      const linkUrl = child.attrGet("href") ?? "";
       index++;
-      const linkText = token.children[index].content;
-      text += linkText;
+      const linkTextToken = children[index];
+      if (!linkTextToken)
+        throw new Error(
+          Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+        );
+      const linkText = linkTextToken.content;
       links.push({ text: linkText, url: linkUrl });
     } else {
       text += child.content;
@@ -233,26 +267,24 @@ function heading(token) {
     index++;
   }
   const convertText = text.toUpperCase().split("");
-  let grid = [[], [], [], [], [], [], []];
-  const almostStyled = [];
-  for (let i = 0; i < convertText.length; i++) {
-    const character = convertText[i];
-    for (let j in grid) {
-      grid[j].push(glyphs.h1[character][j]);
-    }
-  }
-  for (let row of grid) {
-    almostStyled.push(row.join(""));
-  }
-  builtString = almostStyled.join("\n");
+  let grid: string[][] = [[], [], [], [], [], [], []];
+  convertText.forEach((character) => {
+    grid.forEach((row, index) => {
+      row.push(glyphs.h1[character][index]);
+    });
+  });
+  const obj: HeadingObject = {
+    headingTextArray: grid,
+    links: "",
+  };
   for (let link of links) {
     const builtLink = `\n${link.text}: ${terminalLink(link.url, link.url, { fallback: false })} `;
-    builtString += builtLink;
+    obj.links += builtLink;
   }
-  return builtString;
+  return obj;
 }
 
-export async function codeBlock(token) {
+export async function codeBlock(token: Token) {
   if (!token.type.match(/fence|code_block/))
     throw new Error("WRONG TOKEN HOW IS THIS DEV SO STUPID");
   if (
@@ -260,26 +292,26 @@ export async function codeBlock(token) {
     Object.keys(Shiki.bundledLanguagesAlias).includes(token.info)
   ) {
     const shikiTokens = await Shiki.codeToTokens(token.content, {
-      lang: token.info,
+      lang: token.info as Shiki.BundledLanguage,
       theme: "github-dark",
     });
     const stylizedCodeArr = [];
     for (let line of shikiTokens.tokens) {
       let styledTokens = [];
-      for (let token of line) {
-        let temp = Chalk.hex(token.color)(token.content);
-        if (token.color & FontStyle.Bold) temp = Chalk.bold(temp);
-        if (token.color & FontStyle.Italic) temp = Chalk.italic(temp);
-        if (token.color & FontStyle.Underline) temp = Chalk.underline(temp);
-        if (token.color & FontStyle.Strikethrough)
-          temp = Chalk.strikethrough(temp);
+      for (let shikiToken of line) {
+        const color: any = shikiToken.color || "#ffffff";
+        let temp = Chalk.hex(color)(shikiToken.content);
+        if (color & FontStyle.Bold) temp = Chalk.bold(temp);
+        if (color & FontStyle.Italic) temp = Chalk.italic(temp);
+        if (color & FontStyle.Underline) temp = Chalk.underline(temp);
+        if (color & FontStyle.Strikethrough) temp = Chalk.strikethrough(temp);
         styledTokens.push(temp);
       }
       stylizedCodeArr.push(styledTokens.join(""));
     }
     const code = {
       code: stylizedCodeArr.join("\n"),
-      language: shikiTokens ? shikiTokens.grammarState.lang : "plain",
+      language: shikiTokens.grammarState?.lang ?? "plain",
     };
     return code;
   } else {
@@ -290,37 +322,43 @@ export async function codeBlock(token) {
   }
 }
 
-export async function table(tokens) {
-  const tableRows = [];
-  const state = [];
-  let currentRow = null;
+export async function table(tokens: Token[]) {
+  const tableRows: any[] = [];
+  const currentRow: any[] = [];
   let currentAlign = "";
 
   // State & Parsing Handlers
-  const handlers = {
-    thead_open: () => state.push("thead"),
-    tbody_open: () => state.push("tbody"),
-    thead_close: () => state.pop(),
-    tbody_close: () => state.pop(),
-    tr_open: () => {
-      currentRow = [];
+  const handlers: Record<string, (t: Token) => void | Promise<void>> = {
+    thead_open: (): void => {
+      state.push("thead");
     },
-    tr_close: () => {
-      if (currentRow) tableRows.push(currentRow);
-      currentRow = null;
+    tbody_open: (): void => {
+      state.push("tbody");
     },
-
-    th_open: (token) => {
-      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
-      currentAlign = alignMatch ? alignMatch[1] : "center";
+    thead_close: (): void => {
+      state.pop();
     },
-    td_open: (token) => {
-      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
-      currentAlign = alignMatch ? alignMatch[1] : "left";
+    tbody_close: (): void => {
+      state.pop();
+    },
+    tr_open: (): void => {
+      state.push("tr");
+    },
+    tr_close: (): void => {
+      if (currentRow) tableRows.push(currentRow.splice(0));
     },
 
-    inline: async (token) => {
-      if (!currentRow) return;
+    th_open: (token: Token): void => {
+      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
+      currentAlign = alignMatch?.[1] ?? "center";
+    },
+
+    td_open: (token: Token): void => {
+      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
+      currentAlign = alignMatch?.[1] ?? "left";
+    },
+
+    inline: async (token: Token): Promise<void> => {
       currentRow.push({
         content: await renderInline(token),
         textAlign: currentAlign,
@@ -330,18 +368,20 @@ export async function table(tokens) {
 
   // Execution Loop
   for (const token of tokens) {
-    const handle = handlers[token.type];
-    if (handle) {
-      await handle(token);
-    }
+    const type = token.type;
+    const handle = handlers[type];
+    if (handle) await handle(token);
   }
 
   return tableRows;
 }
 
-async function details(tokens) {
+async function details(tokens: Token[]) {
   const tokenStack = [];
-  if (tokens[0].type === "summary_open") {
+  const firstToken: Token | undefined = tokens[0];
+  if (!firstToken) throw new Error("This shouldn't have errored!");
+  if (firstToken.type === "summary_open") {
+    if (!tokens[1]) throw new Error("How did this happen?");
     tokenStack.push({
       type: "summary",
       content: await renderInline(tokens[1]),
@@ -366,14 +406,13 @@ async function details(tokens) {
   }
   return tokenStack;
 }
-
-export default async function stylize(input) {
+export default async function stylize(input: Token[]) {
   // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
   let index = 0;
 
   while (index < input.length) {
-    const push = {
+    const push: ProcessedToken = {
       type: "",
       content: "",
       properties: {},
@@ -394,7 +433,7 @@ export default async function stylize(input) {
         Chalk.bold.red(`Type of token at index ${index} is ${token?.type}!`),
       );
     if (token.type.match(/_open/)) {
-      const accumulatedTokens = [];
+      const accumulatedTokens: Token[] = [];
       index++;
       const tokenType = token.type.replace("_open", "");
       if (!input[index]) {
@@ -405,23 +444,23 @@ export default async function stylize(input) {
         );
       }
 
-      while (input[index] && input[index].level !== token.level) {
-        accumulatedTokens.push(input[index]);
+      while (input[index] && input[index]!.level !== token.level) {
+        accumulatedTokens.push(input[index]!);
         index++;
       }
-      const handleTokens = {
-        paragraph: async (tokens) => await renderInline(tokens[0]), // it's always just one inline token
-        table: async (tokens) => await table(tokens),
-        heading: (tokens) => heading(tokens[0]),
-        div: async (tokens) => await stylize(tokens),
-        blockquote: async (tokens) => await stylize(tokens),
-        bullet_list: async (tokens) => await stylize(tokens),
-        ordered_list: async (tokens) => await stylize(tokens),
-        list_item: async (tokens) => await stylize(tokens),
+      const handleTokens: Record<string, (tokens: Token[]) => Promise<any>> = {
+        paragraph: async (tokens: Token[]) => await renderInline(tokens[0]!), // it's always just one inline token
+        table: async (tokens: Token[]) => await table(tokens),
+        heading: async (tokens: Token[]) => heading(tokens[0]!),
+        div: async (tokens: Token[]) => await stylize(tokens),
+        blockquote: async (tokens: Token[]) => await stylize(tokens),
+        bullet_list: async (tokens: Token[]) => await stylize(tokens),
+        ordered_list: async (tokens: Token[]) => await stylize(tokens),
+        list_item: async (tokens: Token[]) => await stylize(tokens),
         // these ones recurse because they're container blocks
-        details: async (tokens) => await details(tokens),
+        details: async (tokens: Token[]) => await details(tokens),
 
-        pre: (tokens) => {
+        pre: async (tokens: Token[]) => {
           let builtString = "";
           for (const token of tokens) {
             if (token.content.length > 0) {

@@ -24,7 +24,6 @@ const aliases = new Map(
     ol: "ordered_list",
     li: "list_item",
     u: "ins",
-    img: "image",
   }),
 );
 const blockHtmlTags = new Set([
@@ -73,7 +72,8 @@ const htmlParser = new Parser({
       sanitizedText += `<${name}>`;
     } else {
       isPreviousTagDisallowed = false;
-      openingToken.type = `${aliases.get(name) ?? name}_open`;
+      openingToken.type =
+        name === "img" ? "image" : `${aliases.get(name) ?? name}_open`;
       // set the attributes
       if (Object.keys(attributes).length > 0) {
         openingToken.attrs = [];

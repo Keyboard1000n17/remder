@@ -1,12 +1,10 @@
-# Level 1 afx heading ##
+# Level 1 afx heading
 
 ## Level 2 afx heading #\#
 
-Level 1 setext heading
-======================
+# Level 1 setext heading
 
-Level 2 setext heading
-----------------------
+## Level 2 setext heading
 
 Paragraph
 
@@ -16,9 +14,9 @@ Paragraph
 1. numbered list item 1
 2. numbered list item 2
 
-> blockquote
-> should be part of the same
->> nested blockquote
+> blockquote should be part of the same
+>
+> > nested blockquote
 
 <!--comment shouldn't get rendered-->
 <!--
@@ -34,23 +32,19 @@ Paragraph
 block of code go kaboom
 ```
 
-**bold talk**
-_the pizzeria said mamma mia when i asked for pineapple pizza_
-__there should be a line under this__
-***bold AND italic?!***
-~~don't look here there was never anything here~~
+**bold talk** _the pizzeria said mamma mia when i asked for pineapple pizza_
+**_bold AND italic?!_** ~~don't look here there was never anything here~~
 
 here's a link to my [repo](https://github.com/Keyboard1000n17/remder)
 ![alt text](https://github.com/Keyboard1000n17/OSPedia/tree/master/assets/global/OSPedia-logo.svg)
 
+| terrible             |     table |
+| :------------------- | --------: |
+| that can \|hopefully | be parsed |
 
-terrible|table
-:--|--:
-that can \|hopefully|be parsed
-
-|  good   |      table     |
-|---------|----------------|
-|that can | hopefully parse|
+| good     | table           |
+| -------- | --------------- |
+| that can | hopefully parse |
 
 <h2>HTML Section</h2>
 
@@ -82,14 +76,11 @@ that can \|hopefully|be parsed
   </code>
 </pre>
 
-<b>bold talk</b>
-<i>italian duck</i>
-<u>underlined block</u>
-<s>struck-through much</s>
+<b>bold talk</b> <i>italian duck</i> <u>underlined block</u> <s>struck-through
+much</s>
 
-<strong>strong people</strong>
-<em>important stuff</em>
-<del>this was never here</del>
+<strong>strong people</strong> <em>important stuff</em> <del>this was never
+here</del>
 
 <table>
   <thead>

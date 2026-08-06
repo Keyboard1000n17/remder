@@ -27,6 +27,9 @@ type TerminalImageOpts = {
   width?: string | number;
   height?: string | number;
 };
+type Handlers = {
+  [type: string]: (token: Token[]) => any;
+};
 type HeadingObject = {
   headingTextArray: string[][];
   links: string;
@@ -433,10 +436,12 @@ export default async function stylize(input: Token[]) {
       }
     }
 
-    if (!token.type)
+    if (!token.type) {
       throw new Error(
         Chalk.bold.red(`Type of token at index ${index} is ${token?.type}!`),
       );
+    }
+
     if (token.type.match(/_open/)) {
       const accumulatedTokens: Token[] = [];
       index++;
@@ -444,7 +449,7 @@ export default async function stylize(input: Token[]) {
       if (!input[index]) {
         throw new Error(
           Chalk.red.bold(
-            `Token at index ${index} is undefined.The length of the input array is ${input.length} `,
+            `Token at index ${index} is undefined. The length of the input array is ${input.length} `,
           ),
         );
       }
@@ -453,7 +458,8 @@ export default async function stylize(input: Token[]) {
         accumulatedTokens.push(input[index]!);
         index++;
       }
-      const handleTokens: Record<string, (tokens: Token[]) => Promise<any>> = {
+
+      const handleTokens: Handlers = {
         default: async (tokens: Token[]) => {
           tokens.forEach((token) => {
             if (token.tag !== "") {
@@ -462,7 +468,7 @@ export default async function stylize(input: Token[]) {
               } else if (token.type.match(/_close/)) {
                 accumulatedTokenContentString += `</${token.tag}>`;
               }
-            } else {
+            } else if (token.content.length > 0) {
               accumulatedTokenContentString += token.content;
             }
           });
@@ -498,21 +504,13 @@ export default async function stylize(input: Token[]) {
           return builtString;
         }, // strange? well i couldn't bother making a separate function
       };
-      if (!handleTokens[tokenType]) {
-        throw new Error(
-          Chalk.red.bold(
-            "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
-          ) +
-          "\n" +
-          Chalk.dim(
-            `PS: the token type was ${tokenType}. Its index is ${index} `,
-          ),
-        );
-      }
+
+      const handler: ((tokens: Token[]) => Promise<any>) | undefined =
+        handleTokens[tokenType];
       state.push(tokenType);
-      console.log("STATE:", state);
-      if (handleTokens[tokenType]) {
-        push.content = await handleTokens[tokenType](accumulatedTokens);
+      if (handler) {
+        push.type = tokenType;
+        push.content = await handler(accumulatedTokens);
         const unknownTagString: ProcessedToken = {
           type: "text",
           content: accumulatedTokenContentString,
@@ -520,14 +518,8 @@ export default async function stylize(input: Token[]) {
         };
         output.push(unknownTagString);
         accumulatedTokenContentString = "";
-      } else {
-        if (token.tag !== "") {
-          accumulatedTokenContentString += /_open/.test(token.type)
-            ? `<${token.tag}>`
-            : `</${token.tag}>`;
-        } else {
-          accumulatedTokenContentString += await stylize(accumulatedTokens);
-        }
+      } else if (accumulatedTokens.length > 0) {
+        await handleTokens.default!(accumulatedTokens);
       }
       state.pop();
     } else if (token.type === "fence" || token.type === "code_block") {
@@ -541,7 +533,8 @@ export default async function stylize(input: Token[]) {
       push.content = "";
       state.pop();
     } else if (token.type === "inline") {
-      return await renderInline(token);
+      push.type = "inline";
+      push.content = await renderInline(token);
     } else {
       throw new Error(
         Chalk.red.bold(

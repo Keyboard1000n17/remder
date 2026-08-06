@@ -71,9 +71,9 @@ here's a link to my [repo](https://github.com/Keyboard1000n17/remder)
 <p>This better <code>work</code>.</p>
 
 <pre>
-  <code>
-    Too bad i don't expect much from it.
-  </code>
+<code>
+Too bad i don't expect much from it.
+</code>
 </pre>
 
 <b>bold talk</b> <i>italian duck</i> <u>underlined block</u> <s>struck-through

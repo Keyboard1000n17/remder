@@ -408,6 +408,9 @@ async function details(tokens: Token[]) {
   }
   return tokenStack;
 }
+
+let accumulatedTokenContentString = "";
+
 export default async function stylize(input: Token[]) {
   // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
@@ -451,6 +454,19 @@ export default async function stylize(input: Token[]) {
         index++;
       }
       const handleTokens: Record<string, (tokens: Token[]) => Promise<any>> = {
+        default: async (tokens: Token[]) => {
+          tokens.forEach((token) => {
+            if (token.tag !== "") {
+              if (token.type.match(/_open/)) {
+                accumulatedTokenContentString += `<${token.tag}>`;
+              } else if (token.type.match(/_close/)) {
+                accumulatedTokenContentString += `</${token.tag}>`;
+              }
+            } else {
+              accumulatedTokenContentString += token.content;
+            }
+          });
+        },
         paragraph: async (tokens: Token[]) => await renderInline(tokens[0]!), // it's always just one inline token
         table: async (tokens: Token[]) => await table(tokens),
         heading: async (tokens: Token[]) => heading(tokens[0]!),
@@ -495,7 +511,24 @@ export default async function stylize(input: Token[]) {
       }
       state.push(tokenType);
       console.log("STATE:", state);
-      push.content = await handleTokens[tokenType](accumulatedTokens);
+      if (handleTokens[tokenType]) {
+        push.content = await handleTokens[tokenType](accumulatedTokens);
+        const unknownTagString: ProcessedToken = {
+          type: "text",
+          content: accumulatedTokenContentString,
+          properties: {},
+        };
+        output.push(unknownTagString);
+        accumulatedTokenContentString = "";
+      } else {
+        if (token.tag !== "") {
+          accumulatedTokenContentString += /_open/.test(token.type)
+            ? `<${token.tag}>`
+            : `</${token.tag}>`;
+        } else {
+          accumulatedTokenContentString += await stylize(accumulatedTokens);
+        }
+      }
       state.pop();
     } else if (token.type === "fence" || token.type === "code_block") {
       state.push("fence");
@@ -508,8 +541,7 @@ export default async function stylize(input: Token[]) {
       push.content = "";
       state.pop();
     } else if (token.type === "inline") {
-      push.type = "paragraph"; // since its pretty much a paragraph
-      push.content = await renderInline(token);
+      return await renderInline(token);
     } else {
       throw new Error(
         Chalk.red.bold(

@@ -176,6 +176,7 @@ export default function parse(input: string) {
     parsedTokens.forEach((parsedToken) => {
       if (parsedToken.nesting === -1) level--;
       parsedToken.level = level;
+      parsedToken.content = parsedToken.content.trim();
       if (parsedToken.nesting === 1) level++;
       if (parsedToken.block) {
         if (inlineTokenList.length > 0) {
@@ -227,7 +228,6 @@ export default function parse(input: string) {
 
     state.tokens = finalProcessedTokens;
   });
-  const modifiedInput = input.replaceAll(/<br( \/)?>/g, "\n\n");
-  const tokens = md.parse(modifiedInput, {});
+  const tokens = md.parse(input, {});
   return tokens;
 }

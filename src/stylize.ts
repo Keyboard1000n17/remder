@@ -34,13 +34,15 @@ type HeadingObject = {
   headingTextArray: string[][];
   links: string;
 };
-type ProcessedToken = {
+export type ProcessedToken = {
   type: string;
   content: any;
+  block: boolean;
   properties: {
     [type: string]: any;
   };
 };
+
 const enum FontStyle {
   Italic = 1,
   Bold = 2,
@@ -131,11 +133,12 @@ function getStyle(type: string): keyof typeof inline {
       return "code";
     case "ins_open":
       return "underline";
+    case "kbd_open":
+      return "kbd";
     default:
-      throw new Error(Chalk.red.bold(`getStyle() failed: what is ${type}?`));
+      return "text";
   }
 }
-
 const inline = {
   bold: (text: string) => Chalk.bold(text),
   italic: (text: string) => Chalk.italic(text),
@@ -160,6 +163,7 @@ async function renderInline(token: Token) {
   let text = "";
   if (!token.children)
     throw new Error(`Something went wrong. This shouldn't happen.`);
+  // if this error ever happens, my first thought will be "how the fuck did that happen"
   while (i < token.children.length) {
     const child = token.children[i];
     if (!child) throw new Error(`Something went wrong. This shouldn't happen.`);
@@ -208,8 +212,6 @@ async function renderInline(token: Token) {
       });
     } else if (type === "softbreak") {
       text += " ";
-    } else if (type === "code_inline") {
-      text += Chalk.bgBlack(` ${child.content} `);
     } else if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
@@ -224,11 +226,7 @@ async function renderInline(token: Token) {
       // end for
       text += temp;
     } else {
-      throw new Error(
-        Chalk.bold.red(
-          `Token type not recognized: you might need to add handling for "${type}" in /src/stylize.js. State was ${state}. Token index was ${i}. Token was ${JSON.stringify(token, null, 2)}`,
-        ),
-      );
+      handleTokens.default!([token]);
     }
 
     i++;
@@ -236,7 +234,6 @@ async function renderInline(token: Token) {
   // end for
   if (text !== "") styled.push({ type: "text", content: text });
   state.pop();
-  console.log("STATE:", state);
   return styled;
 }
 
@@ -412,7 +409,78 @@ async function details(tokens: Token[]) {
   return tokenStack;
 }
 
+const handleTokens: Handlers = {
+  default: async (tokens: Token[]) => {
+    tokens.forEach((token) => {
+      if (token.tag !== "") {
+        if (token.type.match(/_open/)) {
+          accumulatedTokenContentString += `<${token.tag}>`;
+        } else if (token.type.match(/_close/)) {
+          accumulatedTokenContentString += `</${token.tag}>`;
+        }
+      } else if (token.content.length > 0) {
+        accumulatedTokenContentString += token.content;
+      }
+    });
+  },
+  paragraph: async (tokens: Token[]) => await renderInline(tokens[0]!), // it's always just one inline token
+  table: async (tokens: Token[]) => await table(tokens),
+  heading: async (tokens: Token[]) => heading(tokens[0]!),
+  div: async (tokens: Token[]) => await stylize(tokens),
+  blockquote: async (tokens: Token[]) => await stylize(tokens),
+  bullet_list: async (tokens: Token[]) => await stylize(tokens),
+  ordered_list: async (tokens: Token[]) => await stylize(tokens),
+  list_item: async (tokens: Token[]) => await stylize(tokens),
+  ruby: async (tokens: Token[]) => await stylize(tokens),
+  // these ones recurse because they're container blocks
+  details: async (tokens: Token[]) => await details(tokens),
+  rp: async (tokens: Token[]) => await renderInline(tokens[0]!),
+  rt: async (tokens: Token[]) => await renderInline(tokens[0]!),
+
+  pre: async (tokens: Token[]) => {
+    let builtString = "";
+    for (const token of tokens) {
+      if (token.content.length > 0) {
+        builtString += token.content;
+      }
+      if (token.children) {
+        for (const child of token.children) {
+          if (child.content.length > 0) {
+            builtString += child.content;
+          }
+        }
+      }
+    }
+    return builtString;
+  }, // strange? well i couldn't bother making a separate function
+};
+
 let accumulatedTokenContentString = "";
+
+// NOTE: chatgpt generated this, and i can not be bothered to do this myself
+function removeWhitespaceTokens(tokens: ProcessedToken[]): ProcessedToken[] {
+  return tokens
+    .map((token) => {
+      if (Array.isArray(token.content)) {
+        return {
+          ...token,
+          content: removeWhitespaceTokens(token.content),
+        };
+      }
+      return token;
+    })
+    .filter((token) => {
+      if (token.type === "text") {
+        if (typeof token.content === "string") {
+          return token.content.trim() !== "";
+        }
+        if (Array.isArray(token.content)) {
+          return token.content.length > 0;
+        }
+      }
+      return true;
+    });
+}
 
 export default async function stylize(input: Token[]) {
   // input is an array returned by `parse()` in `parse - input.js`
@@ -423,6 +491,7 @@ export default async function stylize(input: Token[]) {
     const push: ProcessedToken = {
       type: "",
       content: "",
+      block: false,
       properties: {},
     };
     let token = input[index];
@@ -459,52 +528,6 @@ export default async function stylize(input: Token[]) {
         index++;
       }
 
-      const handleTokens: Handlers = {
-        default: async (tokens: Token[]) => {
-          tokens.forEach((token) => {
-            if (token.tag !== "") {
-              if (token.type.match(/_open/)) {
-                accumulatedTokenContentString += `<${token.tag}>`;
-              } else if (token.type.match(/_close/)) {
-                accumulatedTokenContentString += `</${token.tag}>`;
-              }
-            } else if (token.content.length > 0) {
-              accumulatedTokenContentString += token.content;
-            }
-          });
-        },
-        paragraph: async (tokens: Token[]) => await renderInline(tokens[0]!), // it's always just one inline token
-        table: async (tokens: Token[]) => await table(tokens),
-        heading: async (tokens: Token[]) => heading(tokens[0]!),
-        div: async (tokens: Token[]) => await stylize(tokens),
-        blockquote: async (tokens: Token[]) => await stylize(tokens),
-        bullet_list: async (tokens: Token[]) => await stylize(tokens),
-        ordered_list: async (tokens: Token[]) => await stylize(tokens),
-        list_item: async (tokens: Token[]) => await stylize(tokens),
-        ruby: async (tokens: Token[]) => await stylize(tokens),
-        // these ones recurse because they're container blocks
-        details: async (tokens: Token[]) => await details(tokens),
-        rp: async (tokens: Token[]) => await renderInline(tokens[0]!),
-        rt: async (tokens: Token[]) => await renderInline(tokens[0]!),
-
-        pre: async (tokens: Token[]) => {
-          let builtString = "";
-          for (const token of tokens) {
-            if (token.content.length > 0) {
-              builtString += token.content;
-            }
-            if (token.children) {
-              for (const child of token.children) {
-                if (child.content.length > 0) {
-                  builtString += child.content;
-                }
-              }
-            }
-          }
-          return builtString;
-        }, // strange? well i couldn't bother making a separate function
-      };
-
       const handler: ((tokens: Token[]) => Promise<any>) | undefined =
         handleTokens[tokenType];
       state.push(tokenType);
@@ -514,6 +537,7 @@ export default async function stylize(input: Token[]) {
         const unknownTagString: ProcessedToken = {
           type: "text",
           content: accumulatedTokenContentString,
+          block: false,
           properties: {},
         };
         output.push(unknownTagString);
@@ -533,7 +557,7 @@ export default async function stylize(input: Token[]) {
       push.content = "";
       state.pop();
     } else if (token.type === "inline") {
-      push.type = "inline";
+      push.type = "text";
       push.content = await renderInline(token);
     } else {
       throw new Error(
@@ -548,10 +572,11 @@ export default async function stylize(input: Token[]) {
     }
 
     // no more! push the `push` object to the output array
+    push.block = token.block;
     output.push(push);
     index++;
   }
 
   // state = [];
-  return output;
+  return removeWhitespaceTokens(output);
 }

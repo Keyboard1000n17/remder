@@ -37,7 +37,6 @@ type HeadingObject = {
 export type ProcessedToken = {
   type: string;
   content: any;
-  block: boolean;
   properties: {
     [type: string]: any;
   };
@@ -121,30 +120,13 @@ export async function image(token: Token, areThereOtherTokens: boolean) {
   return new Image(path, alt, terminalImageOpts, shouldDisplayImage);
 }
 
-function getStyle(type: string): keyof typeof inline {
-  switch (type) {
-    case "strong_open":
-      return "bold";
-    case "em_open":
-      return "italic";
-    case "s_open":
-      return "strikethrough";
-    case "code_inline":
-      return "code";
-    case "ins_open":
-      return "underline";
-    case "kbd_open":
-      return "kbd";
-    default:
-      return "text";
-  }
-}
-const inline = {
-  bold: (text: string) => Chalk.bold(text),
-  italic: (text: string) => Chalk.italic(text),
-  strikethrough: (text: string) => Chalk.strikethrough(text),
-  underline: (text: string) => Chalk.underline(text),
+const inline: Record<string, (text: string) => string> = {
+  strong: (text: string) => Chalk.bold(text),
+  em: (text: string) => Chalk.italic(text),
+  s: (text: string) => Chalk.strikethrough(text),
+  del: (text: string) => Chalk.strikethrough(text),
   code: (text: string) => Chalk.bgBlack(text),
+  ins: (text: string) => Chalk.underline(text),
   kbd: (text: string) => Chalk.bgBlack(text),
   mark: (text: string) => Chalk.bgYellow(text),
   plain: (text: string) => text,
@@ -154,7 +136,7 @@ const inline = {
 async function renderInline(token: Token) {
   // token is a token with type = "inline"
   if (token.type !== "inline")
-    throw new Error("WRONG TOKEN WTF THIS DEV IS SUCH A DUMBASS");
+    throw new Error(`Token type should be inline, not ${token.type}!`);
 
   const styled = [];
   state.push("inline");
@@ -198,7 +180,7 @@ async function renderInline(token: Token) {
           ? `${abbreviatedText} (${abbreviation})`
           : abbreviatedText;
     } else if (/_open/.test(type)) {
-      state.push(getStyle(type));
+      state.push(type.split("_")[0]!);
     } else if (/_close/.test(type)) {
       state.pop();
     } else if (type === "image") {
@@ -212,16 +194,18 @@ async function renderInline(token: Token) {
       });
     } else if (type === "softbreak") {
       text += " ";
+    } else if (type === "code_inline") {
+      text += inline.code!(child.content);
     } else if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
-      for (const style of nesting as (keyof typeof inline)[]) {
-        if (!(style in inline)) {
-          throw new Error(
-            Chalk.red.bold(`Inline token type ${style} does not exist.`),
-          );
+      for (const style of nesting) {
+        const handler = inline[style];
+        if (handler) {
+          temp = handler(temp);
+        } else {
+          temp = `<${style}>${temp}</${style}>`;
         }
-        temp = inline[style](temp);
       }
       // end for
       text += temp;
@@ -349,22 +333,20 @@ export async function table(tokens: Token[]) {
     tr_close: (): void => {
       if (currentRow) tableRows.push(currentRow.splice(0));
     },
-
     th_open: (token: Token): void => {
       const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
       currentAlign = alignMatch?.[1] ?? "center";
     },
-
     td_open: (token: Token): void => {
       const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
       currentAlign = alignMatch?.[1] ?? "left";
     },
-
     inline: async (token: Token): Promise<void> => {
       currentRow.push({
+        type: "table-cell",
         content: await renderInline(token),
-        textAlign: currentAlign,
-      });
+        properties: { textAlign: currentAlign },
+      } as ProcessedToken);
     },
   };
 
@@ -423,7 +405,7 @@ const handleTokens: Handlers = {
       }
     });
   },
-  paragraph: async (tokens: Token[]) => await renderInline(tokens[0]!), // it's always just one inline token
+  paragraph: async (tokens: Token[]) => await stylize(tokens), // it's always just one inline token
   table: async (tokens: Token[]) => await table(tokens),
   heading: async (tokens: Token[]) => heading(tokens[0]!),
   div: async (tokens: Token[]) => await stylize(tokens),
@@ -436,7 +418,6 @@ const handleTokens: Handlers = {
   details: async (tokens: Token[]) => await details(tokens),
   rp: async (tokens: Token[]) => await renderInline(tokens[0]!),
   rt: async (tokens: Token[]) => await renderInline(tokens[0]!),
-
   pre: async (tokens: Token[]) => {
     let builtString = "";
     for (const token of tokens) {
@@ -470,13 +451,11 @@ function removeWhitespaceTokens(tokens: ProcessedToken[]): ProcessedToken[] {
       return token;
     })
     .filter((token) => {
-      if (token.type === "text") {
-        if (typeof token.content === "string") {
-          return token.content.trim() !== "";
-        }
-        if (Array.isArray(token.content)) {
-          return token.content.length > 0;
-        }
+      if (typeof token.content === "string") {
+        return token.content.trim() !== "";
+      }
+      if (Array.isArray(token.content)) {
+        return token.content.length > 0;
       }
       return true;
     });
@@ -491,7 +470,6 @@ export default async function stylize(input: Token[]) {
     const push: ProcessedToken = {
       type: "",
       content: "",
-      block: false,
       properties: {},
     };
     let token = input[index];
@@ -537,7 +515,6 @@ export default async function stylize(input: Token[]) {
         const unknownTagString: ProcessedToken = {
           type: "text",
           content: accumulatedTokenContentString,
-          block: false,
           properties: {},
         };
         output.push(unknownTagString);
@@ -572,7 +549,6 @@ export default async function stylize(input: Token[]) {
     }
 
     // no more! push the `push` object to the output array
-    push.block = token.block;
     output.push(push);
     index++;
   }

@@ -28,35 +28,40 @@ const aliases = new Map(
     samp: "kbd",
   }),
 );
-const blockHtmlTags = new Set([
-  "blockquote",
-  "details",
-  "div",
-  "dl",
-  "dd",
-  "dt",
-  "figure",
-  "figcaption",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "hr",
-  "ol",
-  "ul",
-  "li",
-  "p",
-  "pre",
-  "summary",
-  "table",
-  "tbody",
-  "tfoot",
-  "thead",
-  "tr",
-  "th",
-  "td",
+const inlineHtmlTags = new Set([
+  "a",
+  "abbr",
+  "b",
+  "bdi",
+  "bdo",
+  "br",
+  "cite",
+  "q",
+  "code",
+  "del",
+  "dfn",
+  "em",
+  "i",
+  "image",
+  "img",
+  "ins",
+  "kbd",
+  "s",
+  "samp",
+  "small",
+  "mark",
+  "ruby",
+  "rt",
+  "rp",
+  "span",
+  "strike",
+  "strong",
+  "sub",
+  "sup",
+  "time",
+  "tt",
+  "var",
+  "wbr",
 ]);
 let sanitizedText = "";
 let isPreviousTagDisallowed = false;
@@ -84,7 +89,7 @@ const htmlParser = new Parser({
         }
       }
 
-      openingToken.block = blockHtmlTags.has(name);
+      openingToken.block = !inlineHtmlTags.has(name);
     }
     htmlToTokens.push(openingToken);
   },
@@ -110,7 +115,7 @@ const htmlParser = new Parser({
         name,
         -1,
       );
-      closingToken.block = blockHtmlTags.has(name);
+      closingToken.block = !inlineHtmlTags.has(name);
       htmlToTokens.push(closingToken);
     }
   },
@@ -176,7 +181,7 @@ export default function parse(input: string) {
     parsedTokens.forEach((parsedToken) => {
       if (parsedToken.nesting === -1) level--;
       parsedToken.level = level;
-      parsedToken.content = parsedToken.content.trim();
+      parsedToken.content = parsedToken.content;
       if (parsedToken.nesting === 1) level++;
       if (parsedToken.block) {
         if (inlineTokenList.length > 0) {

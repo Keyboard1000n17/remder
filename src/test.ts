@@ -4,7 +4,7 @@ import type { ProcessedToken } from "./stylize.js";
 
 const md = await Bun.file("../test-files/all.md").text();
 const spmd = await s(p(md));
-const width: number = parseInt(process.stdout.columns);
+const width: number = process.stdout.columns;
 
 function test(ts: ProcessedToken[]) {
   let str = "";
@@ -12,6 +12,7 @@ function test(ts: ProcessedToken[]) {
     if (t.type === "heading") {
       const rows = t.content.headingTextArray;
       let start = 0;
+      str += "\n";
       while (start < rows[0].length) {
         let end = start;
         let lineWidth = 0;
@@ -32,9 +33,8 @@ function test(ts: ProcessedToken[]) {
     } else if (Array.isArray(t.content)) {
       str += test(t.content);
     } else if (typeof t.content === "string") {
-      str += t.content;
+      str += t.content + "\n";
     }
-    str += t.block ? "\n\n" : " ";
   }
   return str;
 }

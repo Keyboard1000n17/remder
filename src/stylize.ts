@@ -195,7 +195,7 @@ async function renderInline(token: Token) {
     } else if (type === "softbreak") {
       text += " ";
     } else if (type === "code_inline") {
-      text += inline.code!(child.content);
+      text += inline.code!(` ${child.content} `);
     } else if (type === "text") {
       const nesting = state.slice(state.indexOf("inline") + 1);
       let temp = child.content;
@@ -204,7 +204,7 @@ async function renderInline(token: Token) {
         if (handler) {
           temp = handler(temp);
         } else {
-          temp = `<${style}>${temp}</${style}>`;
+          text += `${text}\n`;
         }
       }
       // end for

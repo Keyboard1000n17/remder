@@ -42,5 +42,5 @@ function test(ts: ProcessedToken[]) {
 console.log(test(spmd));
 
 console.log("———————————————————UNKNOWN TAG HANDLING————————————————————————");
-test(await s(p("<foo>bar</foo>")));
-test(await s(p("<foo><p>baz</p>bar</foo>")));
+console.log(test(await s(p("<foo>bar</foo>"))));
+console.log(test(await s(p("<foo><p>baz</p>bar</foo>"))));

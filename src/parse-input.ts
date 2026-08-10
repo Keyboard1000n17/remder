@@ -88,7 +88,6 @@ const htmlParser = new Parser({
           openingToken.attrSet(key, value);
         }
       }
-
       openingToken.block = !inlineHtmlTags.has(name);
     }
     htmlToTokens.push(openingToken);

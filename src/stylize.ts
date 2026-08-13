@@ -18,7 +18,7 @@ const args = parseArgs({
   allowPositionals: true,
 });
 
-const glyphs = await Bun.file("./chars.json").json();
+const glyphs = await Bun.file(`${import.meta.dir}/chars.json`).json();
 
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
@@ -99,7 +99,7 @@ const term: string | undefined = process.env.TERM;
 if (term === undefined)
   throw new Error(`A TUI can not be run in the background!`);
 
-export async function image(token: Token, areThereOtherTokens: boolean) {
+async function image(token: Token, areThereOtherTokens: boolean) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
     throw new Error(
@@ -133,90 +133,87 @@ const inline: Record<string, (text: string) => string> = {
   text: (text: string) => text,
 };
 
-async function renderInline(token: Token) {
-  // token is a token with type = "inline"
-  if (token.type !== "inline")
-    throw new Error(`Token type should be inline, not ${token.type}!`);
-
+async function renderInline(tokens: Token[]) {
   const styled = [];
-  state.push("inline");
+  for (const token of tokens) {
+    if (token.type === "inline") {
+      state.push("inline");
+      let i = 0;
+      let text = "";
+      if (!token.children)
+        throw new Error(`Something went wrong. This shouldn't happen.`);
+      // if this error ever happens, my first thought will be "how the fuck did that happen"
+      while (i < token.children.length) {
+        const child = token.children[i];
+        if (!child)
+          throw new Error(`Something went wrong. This shouldn't happen.`);
+        const type = child.type;
 
-  let i = 0;
-  let text = "";
-  if (!token.children)
-    throw new Error(`Something went wrong. This shouldn't happen.`);
-  // if this error ever happens, my first thought will be "how the fuck did that happen"
-  while (i < token.children.length) {
-    const child = token.children[i];
-    if (!child) throw new Error(`Something went wrong. This shouldn't happen.`);
-    const type = child.type;
-
-    if (type === "link_open") {
-      const linkUrl = child.attrGet("href") ?? "";
-      i++;
-      const linkTextToken = token.children[i];
-      if (!linkTextToken)
-        throw new Error(
-          Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-        );
-      const linkText = linkTextToken.content;
-      text += Chalk.underline(terminalLink(linkText, linkUrl));
-    } else if (type === "abbr_open") {
-      const abbreviation = child.attrGet("title");
-      i++;
-      const abbrTextToken = token.children[i];
-      if (!abbrTextToken)
-        throw new Error(
-          Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-        );
-      const abbreviatedText = abbrTextToken.content ?? "";
-      if (abbreviation && abbreviation.length > 0) {
-        text += `${abbreviatedText} (${abbreviation})`;
-      } else {
-        text += abbreviatedText;
-      }
-      text +=
-        abbreviation && abbreviation.length > 0
-          ? `${abbreviatedText} (${abbreviation})`
-          : abbreviatedText;
-    } else if (/_open/.test(type)) {
-      state.push(type.split("_")[0]!);
-    } else if (/_close/.test(type)) {
-      state.pop();
-    } else if (type === "image") {
-      // handle images
-      styled.push({ type: "text", content: text });
-      text = "";
-      const areThereOtherTokens = token.children.length > 1;
-      styled.push({
-        type: "image",
-        content: await image(child, areThereOtherTokens),
-      });
-    } else if (type === "softbreak") {
-      text += " ";
-    } else if (type === "code_inline") {
-      text += inline.code!(` ${child.content} `);
-    } else if (type === "text") {
-      const nesting = state.slice(state.indexOf("inline") + 1);
-      let temp = child.content;
-      for (const style of nesting) {
-        const handler = inline[style];
-        if (handler) {
-          temp = handler(temp);
+        if (type === "link_open") {
+          const linkUrl = child.attrGet("href") ?? "";
+          i++;
+          const linkTextToken = token.children[i];
+          if (!linkTextToken)
+            throw new Error(
+              Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+            );
+          const linkText = linkTextToken.content;
+          text += Chalk.underline(terminalLink(linkText, linkUrl));
+        } else if (type === "abbr_open") {
+          const abbreviation = child.attrGet("title");
+          i++;
+          const abbrTextToken = token.children[i];
+          if (!abbrTextToken)
+            throw new Error(
+              Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+            );
+          const abbreviatedText = abbrTextToken.content ?? "";
+          if (abbreviation && abbreviation.length > 0) {
+            text += `${abbreviatedText} (${abbreviation})`;
+          } else {
+            text += abbreviatedText;
+          }
+          text +=
+            abbreviation && abbreviation.length > 0
+              ? `${abbreviatedText} (${abbreviation})`
+              : abbreviatedText;
+        } else if (/_open/.test(type)) {
+          state.push(type.split("_")[0]!);
+        } else if (/_close/.test(type)) {
+          state.pop();
+        } else if (type === "image") {
+          // handle images
+          styled.push({ type: "text", content: text });
+          text = "";
+          const areThereOtherTokens = token.children.length > 1;
+          styled.push({
+            type: "image",
+            content: await image(child, areThereOtherTokens),
+          });
+        } else if (type === "softbreak") {
+          text += " ";
+        } else if (type === "code_inline") {
+          text += inline.code!(` ${child.content} `);
+        } else if (type === "text") {
+          const nesting = state.slice(state.indexOf("inline") + 1);
+          let temp = child.content;
+          for (const style of nesting) {
+            const handler = inline[style];
+            if (handler) {
+              temp = handler(temp);
+            } else {
+              text += `${text}\n`;
+            }
+          }
+          text += temp;
         } else {
-          text += `${text}\n`;
+          handleTokens.default!([token]);
         }
+        i++;
       }
-      // end for
-      text += temp;
-    } else {
-      handleTokens.default!([token]);
+      if (text !== "") styled.push({ type: "text", content: text });
     }
-
-    i++;
   }
-  // end for
-  if (text !== "") styled.push({ type: "text", content: text });
   state.pop();
   return styled;
 }
@@ -344,7 +341,7 @@ export async function table(tokens: Token[]) {
     inline: async (token: Token): Promise<void> => {
       currentRow.push({
         type: "table-cell",
-        content: await renderInline(token),
+        content: await renderInline([token]),
         properties: { textAlign: currentAlign },
       } as ProcessedToken);
     },
@@ -368,7 +365,7 @@ async function details(tokens: Token[]) {
     if (!tokens[1]) throw new Error("How did this happen?");
     tokenStack.push({
       type: "summary",
-      content: await renderInline(tokens[1]),
+      content: await renderInline([tokens[1]]),
       properties: {},
     });
     tokenStack.push({
@@ -405,7 +402,7 @@ const handleTokens: Handlers = {
       }
     });
   },
-  paragraph: async (tokens: Token[]) => await stylize(tokens), // it's always just one inline token
+  paragraph: async (tokens: Token[]) => await renderInline(tokens), // it's always just one inline token
   table: async (tokens: Token[]) => await table(tokens),
   heading: async (tokens: Token[]) => heading(tokens[0]!),
   div: async (tokens: Token[]) => await stylize(tokens),
@@ -416,8 +413,8 @@ const handleTokens: Handlers = {
   ruby: async (tokens: Token[]) => await stylize(tokens),
   // these ones recurse because they're container blocks
   details: async (tokens: Token[]) => await details(tokens),
-  rp: async (tokens: Token[]) => await renderInline(tokens[0]!),
-  rt: async (tokens: Token[]) => await renderInline(tokens[0]!),
+  rp: async (tokens: Token[]) => await renderInline([tokens[0]!]),
+  rt: async (tokens: Token[]) => await renderInline([tokens[0]!]),
   pre: async (tokens: Token[]) => {
     let builtString = "";
     for (const token of tokens) {
@@ -513,7 +510,7 @@ export default async function stylize(input: Token[]) {
         push.type = tokenType;
         push.content = await handler(accumulatedTokens);
         const unknownTagString: ProcessedToken = {
-          type: "text",
+          type: "paragraph",
           content: accumulatedTokenContentString,
           properties: {},
         };
@@ -535,7 +532,7 @@ export default async function stylize(input: Token[]) {
       state.pop();
     } else if (token.type === "inline") {
       push.type = "text";
-      push.content = await renderInline(token);
+      push.content = await renderInline([token]);
     } else {
       throw new Error(
         Chalk.red.bold(

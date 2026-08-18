@@ -5,13 +5,13 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/markdown-it": "^14.1.2"
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^26.2.0"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@opentui/core": "^0.5.1",
     "@resvg/resvg-js": "^2.6.2",
     "chalk": "^5.6.2",
     "got": "^15.1.0",
@@ -20,8 +20,12 @@
     "markdown-it-github-alerts": "^1.0.1",
     "markdown-it-sanitizer": "^0.4.3",
     "markdown-it-task-lists": "^2.1.1",
+    "neo-neo-blessed": "^0.7.1",
     "shiki": "^4.4.1",
     "terminal-image": "^4.3.0",
     "terminal-link": "^5.0.0"
+  },
+  "patchedDependencies": {
+    "neo-neo-blessed@0.7.1": "patches/neo-neo-blessed@0.7.1.patch"
   }
 }

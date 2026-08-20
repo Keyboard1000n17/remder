@@ -1,14 +1,34 @@
 import parseInput from "./parse-input.ts";
 import stylize, { type ProcessedToken } from "./stylize.ts";
-import blessed from "neo-neo-blessed";
+import {
+  createCliRenderer,
+  Box,
+  Text,
+  type ProxiedVNode,
+  Select,
+  type TextChunk,
+  TextTableRenderable,
+  ScrollBox,
+  RGBA,
+  createTextAttributes,
+  StyledText,
+} from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
 import { Chalk } from "chalk";
 import * as fs from "node:fs/promises";
+import {
+  createColorPalette,
+  parseAnsiSequences,
+  type Color,
+} from "ansi-sequence-parser";
 
 const chalk = new Chalk();
-const box = blessed.box;
-const text = blessed.text;
+const tableCell = (text: string): TextChunk[] => [{ __isChunk: true, text }];
+const renderer = await createCliRenderer({
+  exitOnCtrlC: true,
+});
+const colorPalette = createColorPalette();
 
 const args = parseArgs({
   args: Bun.argv,
@@ -19,7 +39,7 @@ const args = parseArgs({
     },
     width: {
       type: "string",
-      default: process.env.COLUMNS || "80",
+      default: process.env.COLUMNS || renderer.width.toString() || "80",
     },
     printToStdout: {
       type: "boolean",
@@ -31,16 +51,16 @@ const args = parseArgs({
   allowNegative: true,
 });
 
-function renderTable(tableTokens: ProcessedToken) {
+function renderTable(tableToken: ProcessedToken) {
   const rows = [];
-  for (const row of tableTokens.content) {
-    for (const cell of row.content) {
+  for (const row of tableToken.content) {
+    const cells = [];
+    for (const cell of row) {
       if (cell.type !== "table-cell") {
         throw new Error(
           chalk.red.bold(`Cell type was ${cell.type} instead of "table-cell"!`),
         );
       }
-      const cells = [];
       for (const item of cell.content) {
         let cellText = "";
         if (item.type === "text") {
@@ -61,52 +81,72 @@ function renderTable(tableTokens: ProcessedToken) {
             ),
           );
         }
-        cells.push(cellText);
+        cells.push(tableCell(cellText));
       }
       rows.push(cells);
     }
   }
-  const table = blessed.table({ rows: rows });
-  return table;
+  return rows;
 }
 
-export async function renderMarkdown(filePath: string) {
-  let fileContent: string = "";
-  const componentArray = [];
-  if (URL.canParse(filePath)) {
-    fileContent = await got(filePath).text();
-  } else {
-    try {
-      fileContent = await Bun.file(filePath).text();
-    } catch (err) {
-      throw new Error(chalk.red(`Encountered an error: ${err}`));
-    }
-  }
-  const stylizedTokens: ProcessedToken[] = await stylize(
-    parseInput(fileContent),
-  );
-  for (const token of stylizedTokens) {
+export async function renderMarkdown(tokens: ProcessedToken[]) {
+  const componentArray: (ProxiedVNode<any> | TextTableRenderable)[] = [];
+  //#region
+  for (const token of tokens) {
+    //#region switch token type
     switch (token.type) {
+      //#region paragraph
       case "paragraph":
         const content = token.content;
-        const tempComponentArray: any[] = [];
+        const tempComponentArray = [];
         for (const element of content) {
           if (element.type === "image") {
             tempComponentArray.push(
               element.shouldDisplayImage
-                ? blessed.text(element.content.render())
-                : blessed.text({ content: chalk.gray(element.alt) }),
+                ? Text({ content: element.content.render() })
+                : Text({ content: chalk.gray(element.alt) }),
             );
           } else if (element.type === "text") {
-            tempComponentArray.push(blessed.text({ content: element.content }));
-          } else {
-            throw new Error(
-              chalk.red.bold(`Did not recognize type ${element.type}`),
+            const parsedAnsi = parseAnsiSequences(element.content);
+            const textRenderables: TextChunk[] = [];
+            parsedAnsi.forEach((ansiToken) =>
+              textRenderables.push({
+                __isChunk: true,
+                text: ansiToken.value,
+                fg: ansiToken.foreground
+                  ? "name" in ansiToken.foreground
+                    ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
+                    : "rgb" in ansiToken.foreground
+                      ? RGBA.fromValues(...ansiToken.foreground.rgb)
+                      : undefined
+                  : undefined,
+                bg: ansiToken.background
+                  ? "name" in ansiToken.background
+                    ? RGBA.fromHex(colorPalette.value(ansiToken.background))
+                    : "rgb" in ansiToken.background
+                      ? RGBA.fromValues(...ansiToken.background.rgb)
+                      : undefined
+                  : undefined,
+                attributes: createTextAttributes({
+                  bold: ansiToken.decorations.has("bold"),
+                  italic: ansiToken.decorations.has("italic"),
+                  underline: ansiToken.decorations.has("underline"),
+                  dim: ansiToken.decorations.has("dim"),
+                  strikethrough: ansiToken.decorations.has("strikethrough"),
+                }),
+              }),
             );
+            tempComponentArray.push(
+              Text({ content: new StyledText(textRenderables) }),
+            );
+          } else {
+            throw new Error(`Did not recognize type ${element.type}`);
           }
         }
-        componentArray.push(box({ children: tempComponentArray }));
+        componentArray.push(Box({}, ...tempComponentArray));
         break;
+      //#endregion
+      //#region heading
       case "heading":
         // NOTE: completely generated by chatgpt
         let str = "";
@@ -130,107 +170,102 @@ export async function renderMarkdown(filePath: string) {
           str += "\n";
           start = end;
         }
-        componentArray.push(text({ content: str }));
+        componentArray.push(Text({ content: str }));
         break;
+      //#endregion
+      //#region table
       case "table":
-        componentArray.push(renderTable(token));
+        componentArray.push(
+          new TextTableRenderable(renderer, { content: renderTable(token) }),
+        );
         break;
+      //#endregion
+      ////#region bullet list
+      case "bullet_list":
+        const bp = "\u2022";
+        const bulletListItems = [];
+        for (const listItem of token.content as ProcessedToken[]) {
+          if (listItem.type !== "list_item")
+            throw new Error(
+              chalk.red.bold(
+                `Expected type "list_item" but got ${listItem.type}`,
+              ),
+            );
+          const listRenderables = await renderMarkdown(listItem.content);
+          for (const listRenderable of listRenderables) {
+            bulletListItems.push(
+              Box(
+                {
+                  flexDirection: "row",
+                  gap: 1,
+                  margin: 0,
+                  padding: 0,
+                },
+                Text({ content: bp }),
+                Box({}, listRenderable),
+              ),
+            );
+          }
+        }
+        componentArray.push(Box({}, ...bulletListItems));
+        break;
+      ////#endregion
+      //#region default
       default:
-        componentArray.push(text({ content: token.content }));
+        componentArray.push(
+          // TODO: e
+        );
+      //#endregion
     }
+    //#endregion
   }
+  //#endregion
   return componentArray;
 }
 
-const filePath = args.positionals.at(-1);
-
-const screen = blessed.screen({
-  smartCSR: true,
-});
-
-if (args.positionals.length > 2 && filePath) {
-  const renderables = await renderMarkdown(filePath);
-  screen.append(box({ children: renderables }));
-} else {
-  const fileNames = (
-    await fs.readdir(".", { recursive: true, withFileTypes: true })
-  )
-    .filter((file) => file.isFile() && file.name.endsWith(".md"))
-    .map((file) =>
-      file.parentPath.length > 0
-        ? [file.parentPath, file.name].join("/")
-        : file.name,
-    );
-  const optionsArray: string[] = [];
-  for (const file of fileNames) {
-    let birthTime = "";
-    try {
-      birthTime = new Date((await fs.stat(file)).birthtime).toDateString();
-    } catch (err) {
-      birthTime = "unknown";
-    }
-    optionsArray.push(file.trim());
+const fileNames = (
+  await fs.readdir(".", { recursive: true, withFileTypes: true })
+)
+  .filter((file) => file.isFile() && file.name.endsWith(".md"))
+  .map((file) =>
+    file.parentPath.length > 0
+      ? [file.parentPath, file.name].join("/")
+      : file.name,
+  );
+const optionsArray = [];
+for (const file of fileNames) {
+  let birthTime = "";
+  try {
+    birthTime = new Date((await fs.stat(file)).birthtime).toDateString();
+  } catch (err) {
+    birthTime = "unknown";
   }
-  const menu = blessed.list({
-    items: optionsArray,
-    width: "100%",
-    height: "100%",
-    interactive: true,
-    keys: true,
-    vi: true,
-    tags: true,
-    invertSelected: false,
-    itemHeight: 2,
-    scrollable: true,
-    scrollbar: {
-      bg: "white",
-    },
-    style: {
-      selected: {
-        fg: "green",
-      },
-      item: {
-        fg: "white",
-      },
-    },
-  });
-  menu.focus();
-  screen.append(menu);
-  // let selected = 0;
-  // let offset = 0;
-  // function renderMenu() {
-  //   const visible = Math.floor(screen.height / 2);
-  //   if (selected < offset) offset = selected;
-  //   if (selected >= offset + visible) offset = selected - visible + 1;
-  //   menu.setContent(
-  //     fileNames
-  //       .slice(offset, offset + visible)
-  //       .map((file, i) => {
-  //         const index = i + offset;
-  //         return index === selected
-  //           ? `{green-fg}${file}{/}\n{#888888-fg}Created at ${birthTimes[index]}{/}`
-  //           : `${file}\n{#888888-fg}${birthTimes[index]}{/}`;
-  //       })
-  //       .join("\n"),
-  //   );
-  //   screen.render();
-  // }
-  // menu.key(["up", "k"], () => {
-  //   if (selected > 0) {
-  //     selected--;
-  //     renderMenu();
-  //   }
-  // });
-  // menu.key(["down", "j"], () => {
-  //   if (selected < fileNames.length - 1) {
-  //     selected++;
-  //     renderMenu();
-  //   }
-  // });
+  optionsArray.push({ name: file, description: `Created at: ${birthTime}` });
 }
-
-screen.render();
-screen.key(["C-c"], () => {
-  screen.destroy();
-  process.exit(0);
+const menu = Select({
+  options: optionsArray,
+  width: "100%",
+  height: "100%",
 });
+
+if (args.positionals.length > 2) {
+  const filePath = args.positionals.at(-1);
+  let fileContent = "";
+  if (URL.canParse(filePath!)) {
+    fileContent = await got(filePath!).text();
+  } else {
+    try {
+      fileContent = await Bun.file(filePath!).text();
+    } catch (err) {
+      throw new Error(`Encountered an error: ${err}`);
+    }
+  }
+  const tokens = await stylize(parseInput(fileContent));
+  const renderables = await renderMarkdown(tokens);
+  const box = ScrollBox({}, renderables);
+  box.focus();
+  renderer.root.add(box);
+} else {
+  menu.focus();
+  renderer.root.add(menu);
+}

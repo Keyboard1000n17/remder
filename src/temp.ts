@@ -1,16 +1,17 @@
-// import { Select, createCliRenderer } from "@opentui/core";
-//
-// const renderer = await createCliRenderer();
-//
-// const menu = Select({
-//   width: 30,
-//   height: 8,
-//   options: [
-//     { name: "Option 1", description: "First option" },
-//     { name: "Option 2", description: "Second option" },
-//     { name: "Option 3", description: "Third option" },
-//   ],
-// });
-//
-// menu.focus();
-// renderer.root.add(menu);
+import { createCliRenderer } from "@opentui/core";
+import chalk from "chalk";
+import { GhosttyTerminalRenderable } from "ghostty-opentui/terminal-buffer";
+
+const renderer = await createCliRenderer({
+  consoleOptions: {
+    startInDebugMode: true,
+  },
+});
+
+const terminal = new GhosttyTerminalRenderable(renderer, {
+  ansi: chalk.bgBlue("hi"),
+});
+
+renderer.root.add(terminal);
+console.log(terminal);
+// renderer.console.toggle();

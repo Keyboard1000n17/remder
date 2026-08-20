@@ -125,7 +125,7 @@ const inline: Record<string, (text: string) => string> = {
   em: (text: string) => Chalk.italic(text),
   s: (text: string) => Chalk.strikethrough(text),
   del: (text: string) => Chalk.strikethrough(text),
-  code: (text: string) => Chalk.bgBlack(text),
+  code: (text: string) => Chalk.bgGray(text),
   ins: (text: string) => Chalk.underline(text),
   kbd: (text: string) => Chalk.bgBlack(text),
   mark: (text: string) => Chalk.bgYellow(text),
@@ -192,6 +192,8 @@ async function renderInline(tokens: Token[]) {
           });
         } else if (type === "softbreak") {
           text += " ";
+        } else if (type === "hardbreak") {
+          text += "\n\n";
         } else if (type === "code_inline") {
           text += inline.code!(` ${child.content} `);
         } else if (type === "text") {
@@ -202,7 +204,7 @@ async function renderInline(tokens: Token[]) {
             if (handler) {
               temp = handler(temp);
             } else {
-              text += `${text}\n`;
+              temp += `\n`;
             }
           }
           text += temp;

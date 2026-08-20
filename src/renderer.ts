@@ -180,7 +180,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         );
         break;
       //#endregion
-      ////#region bullet list
+      //#region bullet list
       case "bullet_list":
         const bp = "\u2022";
         const bulletListItems = [];
@@ -209,12 +209,70 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         }
         componentArray.push(Box({}, ...bulletListItems));
         break;
-      ////#endregion
+      //#endregion
+      //#region ordered list
+      case "ordered_list":
+        let number = token.properties.start || 1;
+        const orderedListItems = [];
+        for (const listItem of token.content as ProcessedToken[]) {
+          if (listItem.type !== "list_item")
+            throw new Error(
+              chalk.red.bold(
+                `Expected type "list_item" but got ${listItem.type}`,
+              ),
+            );
+          const listRenderables = await renderMarkdown(listItem.content);
+          for (const listRenderable of listRenderables) {
+            orderedListItems.push(
+              Box(
+                {
+                  flexDirection: "row",
+                  gap: 1,
+                  margin: 0,
+                  padding: 0,
+                },
+                Text({ content: `${number}.` }),
+                Box({}, listRenderable),
+              ),
+            );
+            number++;
+          }
+        }
+        componentArray.push(Box({}, ...orderedListItems));
+        break;
+      //#endregion
       //#region default
       default:
-        componentArray.push(
-          // TODO: e
+        const parsedAnsi = parseAnsiSequences(String(token.content));
+        const textRenderables: TextChunk[] = [];
+        parsedAnsi.forEach((ansiToken) =>
+          textRenderables.push({
+            __isChunk: true,
+            text: ansiToken.value,
+            fg: ansiToken.foreground
+              ? "name" in ansiToken.foreground
+                ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
+                : "rgb" in ansiToken.foreground
+                  ? RGBA.fromValues(...ansiToken.foreground.rgb)
+                  : undefined
+              : undefined,
+            bg: ansiToken.background
+              ? "name" in ansiToken.background
+                ? RGBA.fromHex(colorPalette.value(ansiToken.background))
+                : "rgb" in ansiToken.background
+                  ? RGBA.fromValues(...ansiToken.background.rgb)
+                  : undefined
+              : undefined,
+            attributes: createTextAttributes({
+              bold: ansiToken.decorations.has("bold"),
+              italic: ansiToken.decorations.has("italic"),
+              underline: ansiToken.decorations.has("underline"),
+              dim: ansiToken.decorations.has("dim"),
+              strikethrough: ansiToken.decorations.has("strikethrough"),
+            }),
+          }),
         );
+        componentArray.push(Text({ content: new StyledText(textRenderables) }));
       //#endregion
     }
     //#endregion
@@ -262,7 +320,7 @@ if (args.positionals.length > 2) {
   }
   const tokens = await stylize(parseInput(fileContent));
   const renderables = await renderMarkdown(tokens);
-  const box = ScrollBox({}, renderables);
+  const box = ScrollBox({ rowGap: 1 }, renderables);
   box.focus();
   renderer.root.add(box);
 } else {

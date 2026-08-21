@@ -17,11 +17,7 @@ import { parseArgs } from "node:util";
 import got from "got";
 import { Chalk } from "chalk";
 import * as fs from "node:fs/promises";
-import {
-  createColorPalette,
-  parseAnsiSequences,
-  type Color,
-} from "ansi-sequence-parser";
+import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 
 const chalk = new Chalk();
 const tableCell = (text: string): TextChunk[] => [{ __isChunk: true, text }];
@@ -158,7 +154,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           let lineWidth = 0;
           while (
             end < rows[0].length &&
-            lineWidth + rows[0][end].length <= args.values.width
+            lineWidth + rows[0][end].length <= parseInt(args.values.width) - 2
           ) {
             lineWidth += rows[0][end].length;
             end++;
@@ -198,8 +194,6 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
                 {
                   flexDirection: "row",
                   gap: 1,
-                  margin: 0,
-                  padding: 0,
                 },
                 Text({ content: bp }),
                 Box({}, listRenderable),
@@ -228,8 +222,6 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
                 {
                   flexDirection: "row",
                   gap: 1,
-                  margin: 0,
-                  padding: 0,
                 },
                 Text({ content: `${number}.` }),
                 Box({}, listRenderable),
@@ -239,6 +231,35 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           }
         }
         componentArray.push(Box({}, ...orderedListItems));
+        break;
+      //#endregion
+      //#region blockquote
+      case "blockquote":
+        const uhb = "\u258c"; // unicode left half block
+        const blockquoteRenderables = await renderMarkdown(token.content);
+        componentArray.push(
+          Box(
+            {
+              border: ["left"],
+              paddingLeft: 1,
+              customBorderChars: {
+                bottomLeft: uhb,
+                bottomRight: uhb,
+                topLeft: uhb,
+                topRight: uhb,
+                vertical: uhb,
+                horizontal: uhb,
+                topT: uhb,
+                bottomT: uhb,
+                leftT: uhb,
+                rightT: uhb,
+                cross: uhb,
+              },
+              borderColor: RGBA.fromHex("#888"),
+            },
+            ...blockquoteRenderables,
+          ),
+        );
         break;
       //#endregion
       //#region default
@@ -320,7 +341,8 @@ if (args.positionals.length > 2) {
   }
   const tokens = await stylize(parseInput(fileContent));
   const renderables = await renderMarkdown(tokens);
-  const box = ScrollBox({ rowGap: 1 }, renderables);
+  renderables.forEach((renderable) => (renderable.marginBottom = 1));
+  const box = ScrollBox({ rowGap: 2 }, renderables);
   box.focus();
   renderer.root.add(box);
 } else {

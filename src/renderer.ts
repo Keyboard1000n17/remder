@@ -1,5 +1,5 @@
 import parseInput from "./parse-input.ts";
-import stylize, { type ProcessedToken } from "./stylize.ts";
+import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.ts";
 import {
   createCliRenderer,
   Box,
@@ -12,6 +12,7 @@ import {
   RGBA,
   createTextAttributes,
   StyledText,
+  type TextTableContent,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -47,10 +48,18 @@ const args = parseArgs({
   allowNegative: true,
 });
 
-function renderTable(tableToken: ProcessedToken) {
+async function renderTable(tableToken: ProcessedToken) {
   const rows = [];
+  if (!Array.isArray(tableToken.content))
+    throw new Error(
+      `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
+    );
   for (const row of tableToken.content) {
     const cells = [];
+    if (!Array.isArray(row))
+      throw new Error(
+        `Table token type is somehow ${typeof row} instead of an array!`,
+      );
     for (const cell of row) {
       if (cell.type !== "table-cell") {
         throw new Error(
@@ -62,14 +71,12 @@ function renderTable(tableToken: ProcessedToken) {
         if (item.type === "text") {
           if (typeof item.content !== "string") {
             throw new Error(
-              chalk.red.bold(
-                `The type of the table cell content was ${typeof item.content} instead of string!`,
-              ),
+              `The type of the table cell content was ${typeof item.content} instead of string!`,
             );
           }
           cellText += item.content;
         } else if (item.type === "image") {
-          cellText += item.content.render();
+          cellText += await item.content.render();
         } else {
           throw new Error(
             chalk.red.bold(
@@ -82,6 +89,7 @@ function renderTable(tableToken: ProcessedToken) {
       rows.push(cells);
     }
   }
+  // rows.forEach((cells) => cells.forEach((cell) => console.log(cell)));
   return rows;
 }
 
@@ -91,19 +99,52 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
   for (const token of tokens) {
     //#region switch token type
     switch (token.type) {
-      //#region paragraph
+      //#region paragraph/text
+      // @ts-expect-error - intentional fallthrough
+      case "text":
+        if (typeof token.content === "string") {
+          componentArray.push(
+            Text({
+              content: token.content
+                .trim()
+                .split("\n")
+                .map((line) => line.trim())
+                .join("\n"),
+            }),
+          );
+          break;
+        }
       case "paragraph":
         const content = token.content;
         const tempComponentArray = [];
+        if (!Array.isArray(content))
+          throw new Error(
+            `Table token type is somehow ${typeof content} instead of an array!`,
+          );
+
         for (const element of content) {
-          if (element.type === "image") {
+          if ("imageAlt" in element)
+            continue; // this shouldn't be possible?
+          else if (
+            element.type === "image" &&
+            typeof element.content === "object" &&
+            "imageAlt" in element.content
+          ) {
+            const image = element.content;
             tempComponentArray.push(
-              element.shouldDisplayImage
-                ? Text({ content: element.content.render() })
-                : Text({ content: chalk.gray(element.alt) }),
+              image.shouldDisplayImage
+                ? Text({ content: await image.render() })
+                : Text({ content: chalk.gray(image.imageAlt) }),
             );
           } else if (element.type === "text") {
-            const parsedAnsi = parseAnsiSequences(element.content);
+            if (typeof element.content !== "string") throw new Error("What?");
+            const parsedAnsi = parseAnsiSequences(
+              element.content
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0)
+                .join("\n"),
+            );
             const textRenderables: TextChunk[] = [];
             parsedAnsi.forEach((ansiToken) =>
               textRenderables.push({
@@ -136,27 +177,37 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
               Text({ content: new StyledText(textRenderables) }),
             );
           } else {
-            throw new Error(`Did not recognize type ${element.type}`);
+            throw new Error(
+              `Did not recognize type ${element.type}.
+               Element contents are ${Object.keys(element.content)}.`,
+            );
           }
         }
-        componentArray.push(Box({}, ...tempComponentArray));
+        componentArray.push(Box({ padding: 0 }, ...tempComponentArray));
         break;
       //#endregion
       //#region heading
       case "heading":
         // NOTE: completely generated by chatgpt
         let str = "";
-        const rows = token.content.headingTextArray;
+        if (
+          typeof token.content === "string" ||
+          !("headingTextArray" in token.content)
+        )
+          throw new Error("What?");
+        const tokenContent: HeadingObject = token.content;
+        const rows = tokenContent.headingTextArray;
+        console.log(token);
         let start = 0;
         str += "\n";
-        while (start < rows[0].length) {
+        while (start < rows[0]!.length) {
           let end = start;
           let lineWidth = 0;
           while (
-            end < rows[0].length &&
-            lineWidth + rows[0][end].length <= parseInt(args.values.width) - 2
+            end < rows[0]!.length &&
+            lineWidth + rows[0]![end]!.length <= parseInt(args.values.width) - 2
           ) {
-            lineWidth += rows[0][end].length;
+            lineWidth += rows[0]![end]!.length;
             end++;
           }
           for (const row of rows) {
@@ -167,12 +218,34 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           start = end;
         }
         componentArray.push(Text({ content: str }));
+        const ansiLinks = parseAnsiSequences(token.content.links);
+        const linksArray: TextChunk[] = [];
+        ansiLinks.forEach((ansiLink) =>
+          linksArray.push({
+            __isChunk: true,
+            text: ansiLink.value,
+            attributes: createTextAttributes({
+              bold: ansiLink.decorations.has("bold"),
+              italic: ansiLink.decorations.has("italic"),
+              underline: ansiLink.decorations.has("underline"),
+              dim: ansiLink.decorations.has("dim"),
+              strikethrough: ansiLink.decorations.has("strikethrough"),
+            }),
+          }),
+        );
+        componentArray.push(
+          Text({
+            content: new StyledText(linksArray),
+          }),
+        );
         break;
       //#endregion
       //#region table
       case "table":
         componentArray.push(
-          new TextTableRenderable(renderer, { content: renderTable(token) }),
+          new TextTableRenderable(renderer, {
+            content: (await renderTable(token)) as TextTableContent,
+          }),
         );
         break;
       //#endregion
@@ -183,11 +256,15 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         for (const listItem of token.content as ProcessedToken[]) {
           if (listItem.type !== "list_item")
             throw new Error(
-              chalk.red.bold(
-                `Expected type "list_item" but got ${listItem.type}`,
-              ),
+              `Expected type "list_item" but got ${listItem.type}`,
             );
-          const listRenderables = await renderMarkdown(listItem.content);
+          if (!Array.isArray(listItem.content))
+            throw new Error(
+              `The contents of this list item were somehow not an array.`,
+            );
+          const listRenderables = await renderMarkdown(
+            listItem.content as ProcessedToken[],
+          );
           for (const listRenderable of listRenderables) {
             bulletListItems.push(
               Box(
@@ -211,11 +288,11 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         for (const listItem of token.content as ProcessedToken[]) {
           if (listItem.type !== "list_item")
             throw new Error(
-              chalk.red.bold(
-                `Expected type "list_item" but got ${listItem.type}`,
-              ),
+              `Expected type "list_item" but got ${listItem.type}`,
             );
-          const listRenderables = await renderMarkdown(listItem.content);
+          const listRenderables = await renderMarkdown(
+            listItem.content as ProcessedToken[],
+          );
           for (const listRenderable of listRenderables) {
             orderedListItems.push(
               Box(
@@ -236,7 +313,9 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
       //#region blockquote
       case "blockquote":
         const uhb = "\u258c"; // unicode left half block
-        const blockquoteRenderables = await renderMarkdown(token.content);
+        const blockquoteRenderables = await renderMarkdown(
+          token.content as ProcessedToken[],
+        );
         componentArray.push(
           Box(
             {
@@ -264,6 +343,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
       //#endregion
       //#region default
       default:
+        console.log("DEFAULT CASE:", token);
         const parsedAnsi = parseAnsiSequences(String(token.content));
         const textRenderables: TextChunk[] = [];
         parsedAnsi.forEach((ansiToken) =>
@@ -340,12 +420,13 @@ if (args.positionals.length > 2) {
     }
   }
   const tokens = await stylize(parseInput(fileContent));
-  const renderables = await renderMarkdown(tokens);
+  const renderables = await renderMarkdown(tokens as ProcessedToken[]);
   renderables.forEach((renderable) => (renderable.marginBottom = 1));
-  const box = ScrollBox({ rowGap: 2 }, renderables);
+  const box = ScrollBox({}, renderables);
   box.focus();
   renderer.root.add(box);
 } else {
   menu.focus();
   renderer.root.add(menu);
 }
+renderer.console.toggle();

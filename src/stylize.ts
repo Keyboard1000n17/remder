@@ -28,15 +28,29 @@ type TerminalImageOpts = {
   height?: string | number;
 };
 type Handlers = {
-  [type: string]: (token: Token[]) => any;
+  [type: string]: (
+    token: Token[],
+  ) => Promise<
+    | ProcessedToken
+    | (ProcessedToken | Image)[]
+    | ProcessedToken[]
+    | string
+    | void
+    | HeadingObject
+  >;
 };
-type HeadingObject = {
+export type HeadingObject = {
   headingTextArray: string[][];
   links: string;
 };
 export type ProcessedToken = {
   type: string;
-  content: any;
+  content:
+  | string
+  | Image
+  | (ProcessedToken | Image)[]
+  | { code: string; language: string }
+  | HeadingObject;
   properties: {
     [type: string]: any;
   };
@@ -51,7 +65,7 @@ const enum FontStyle {
 
 let state: StateEntry[] = []; // global var
 
-class Image {
+export class Image {
   public buffer: any;
   constructor(
     public path: string,
@@ -64,34 +78,36 @@ class Image {
   static async #getBuffer(path: string) {
     try {
       return URL.canParse(path)
-        ? await got(path).buffer()
+        ? (await got(path)).rawBody
         : Bun.file(path).arrayBuffer();
     } catch (err) {
       return null;
     }
   }
   async render() {
-    if (this.shouldDisplayImage) {
-      const path = this.path;
-      const buffer = await this.buffer;
-      if (path.match(/\.gif$/)) {
-        return terminalImage.gifBuffer(buffer, this.opts);
-      } else if (path.match(/\.svg$/)) {
-        return terminalImage.buffer(
+    const path = this.path;
+    const buffer = await this.buffer;
+    if (!buffer) return Chalk.dim(this.imageAlt);
+    let rendered = "";
+    if (path.match(/\.svg$/)) {
+      console.log(buffer);
+      try {
+        rendered = await terminalImage.buffer(
           new Resvg(buffer).render().asPng(),
           this.opts,
         );
-      } else if (path.match(/\.webp$/)) {
-        return terminalImage.buffer(
-          await new Bun.Image(buffer).png().buffer(),
-          this.opts,
-        );
-      } else {
-        return terminalImage.buffer(buffer, this.opts);
+      } catch (err) {
+        rendered = Chalk.dim(this.imageAlt);
       }
+    } else if (path.match(/\.webp$/)) {
+      rendered = await terminalImage.buffer(
+        await new Bun.Image(buffer).png().buffer(),
+        this.opts,
+      );
     } else {
-      return Chalk.dim(this.imageAlt);
+      rendered = await terminalImage.buffer(buffer, this.opts);
     }
+    return rendered;
   }
 }
 
@@ -134,7 +150,7 @@ const inline: Record<string, (text: string) => string> = {
 };
 
 async function renderInline(tokens: Token[]) {
-  const styled = [];
+  const styled: ProcessedToken[] = [];
   for (const token of tokens) {
     if (token.type === "inline") {
       state.push("inline");
@@ -148,8 +164,8 @@ async function renderInline(tokens: Token[]) {
         if (!child)
           throw new Error(`Something went wrong. This shouldn't happen.`);
         const type = child.type;
-
         if (type === "link_open") {
+          //#region links
           const linkUrl = child.attrGet("href") ?? "";
           i++;
           const linkTextToken = token.children[i];
@@ -159,7 +175,9 @@ async function renderInline(tokens: Token[]) {
             );
           const linkText = linkTextToken.content;
           text += Chalk.underline(terminalLink(linkText, linkUrl));
+          //#endregion
         } else if (type === "abbr_open") {
+          //#region abbreviations
           const abbreviation = child.attrGet("title");
           i++;
           const abbrTextToken = token.children[i];
@@ -177,26 +195,40 @@ async function renderInline(tokens: Token[]) {
             abbreviation && abbreviation.length > 0
               ? `${abbreviatedText} (${abbreviation})`
               : abbreviatedText;
+          //#endregion
         } else if (/_open/.test(type)) {
+          //#region
           state.push(type.split("_")[0]!);
+          //#endregion
         } else if (/_close/.test(type)) {
+          //#region
           state.pop();
+          //#endregion
         } else if (type === "image") {
-          // handle images
-          styled.push({ type: "text", content: text });
+          //#region images
+          styled.push({ type: "text", content: text, properties: {} });
           text = "";
           const areThereOtherTokens = token.children.length > 1;
           styled.push({
             type: "image",
             content: await image(child, areThereOtherTokens),
-          });
+            properties: {},
+          } as ProcessedToken);
+          //#endregion
         } else if (type === "softbreak") {
+          //#region softbreaks
           text += " ";
+          //#endregion
         } else if (type === "hardbreak") {
+          //#region hardbreaks
           text += "\n\n";
+          //#endregion
         } else if (type === "code_inline") {
+          //#region inline code
           text += inline.code!(` ${child.content} `);
+          //#endregion
         } else if (type === "text") {
+          //#region text
           const nesting = state.slice(state.indexOf("inline") + 1);
           let temp = child.content;
           for (const style of nesting) {
@@ -208,12 +240,20 @@ async function renderInline(tokens: Token[]) {
             }
           }
           text += temp;
+          //#endregion
         } else {
-          handleTokens.default!([token]);
+          //#region
+          handleTokens.default!([child]);
+          //#endregion
         }
         i++;
       }
-      if (text !== "") styled.push({ type: "text", content: text });
+      if (text !== "")
+        styled.push({
+          type: "text",
+          content: text,
+          properties: {},
+        } as ProcessedToken);
     }
   }
   state.pop();
@@ -438,10 +478,12 @@ const handleTokens: Handlers = {
 let accumulatedTokenContentString = "";
 
 // NOTE: chatgpt generated this, and i can not be bothered to do this myself
-function removeWhitespaceTokens(tokens: ProcessedToken[]): ProcessedToken[] {
+function removeWhitespaceTokens(
+  tokens: (ProcessedToken | Image)[],
+): (ProcessedToken | Image)[] {
   return tokens
     .map((token) => {
-      if (Array.isArray(token.content)) {
+      if (!("imageAlt" in token) && Array.isArray(token.content)) {
         return {
           ...token,
           content: removeWhitespaceTokens(token.content),
@@ -450,11 +492,13 @@ function removeWhitespaceTokens(tokens: ProcessedToken[]): ProcessedToken[] {
       return token;
     })
     .filter((token) => {
-      if (typeof token.content === "string") {
-        return token.content.trim() !== "";
-      }
-      if (Array.isArray(token.content)) {
-        return token.content.length > 0;
+      if (!("imageAlt" in token)) {
+        if (typeof token.content === "string") {
+          return token.content.trim() !== "";
+        }
+        if (Array.isArray(token.content)) {
+          return token.content.length > 0;
+        }
       }
       return true;
     });

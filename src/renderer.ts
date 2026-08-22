@@ -16,36 +16,42 @@ import {
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
-import { Chalk } from "chalk";
-import * as fs from "node:fs/promises";
+import chalk from "chalk";
+import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 
-const chalk = new Chalk();
 const tableCell = (text: string): TextChunk[] => [{ __isChunk: true, text }];
-const renderer = await createCliRenderer({
-  exitOnCtrlC: true,
-});
 const colorPalette = createColorPalette();
 
 const args = parseArgs({
-  args: Bun.argv,
   options: {
-    renderImages: {
+    noRenderImages: {
       type: "boolean",
       default: true,
+      short: "i",
     },
     width: {
       type: "string",
-      default: process.env.COLUMNS || renderer.width.toString() || "80",
+      default: process.stdout.columns.toString() || "80",
+      short: "w",
     },
     printToStdout: {
       type: "boolean",
       default: false,
       short: "o",
     },
+    debug: {
+      type: "boolean",
+      default: false,
+      short: "d",
+    },
   },
   allowPositionals: true,
-  allowNegative: true,
+});
+
+const renderer = await createCliRenderer({
+  exitOnCtrlC: true,
+  width: parseInt(args.values.width),
 });
 
 async function renderTable(tableToken: ProcessedToken) {
@@ -132,7 +138,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           ) {
             const image = element.content;
             tempComponentArray.push(
-              image.shouldDisplayImage
+              args.values.noRenderImages
                 ? Text({ content: await image.render() })
                 : Text({ content: chalk.gray(image.imageAlt) }),
             );
@@ -382,9 +388,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
   return componentArray;
 }
 
-const fileNames = (
-  await fs.readdir(".", { recursive: true, withFileTypes: true })
-)
+const fileNames = (await readdir(".", { recursive: true, withFileTypes: true }))
   .filter((file) => file.isFile() && file.name.endsWith(".md"))
   .map((file) =>
     file.parentPath.length > 0
@@ -395,7 +399,7 @@ const optionsArray = [];
 for (const file of fileNames) {
   let birthTime = "";
   try {
-    birthTime = new Date((await fs.stat(file)).birthtime).toDateString();
+    birthTime = new Date((await stat(file)).birthtime).toDateString();
   } catch (err) {
     birthTime = "unknown";
   }
@@ -407,7 +411,7 @@ const menu = Select({
   height: "100%",
 });
 
-if (args.positionals.length > 2) {
+if (args.positionals.length > 0) {
   const filePath = args.positionals.at(-1);
   let fileContent = "";
   if (URL.canParse(filePath!)) {
@@ -429,4 +433,4 @@ if (args.positionals.length > 2) {
   menu.focus();
   renderer.root.add(menu);
 }
-renderer.console.toggle();
+if (args.values.debug) renderer.console.toggle();

@@ -7,17 +7,6 @@ import type Token from "markdown-it/lib/token.mjs";
 import * as Shiki from "shiki";
 import { parseArgs } from "node:util";
 
-const args = parseArgs({
-  args: Bun.argv,
-  options: {
-    disableImages: {
-      type: "boolean",
-      default: false,
-    },
-  },
-  allowPositionals: true,
-});
-
 const glyphs = await Bun.file(`${import.meta.dir}/chars.json`).json();
 
 type InlineStyle = keyof typeof inline;
@@ -71,7 +60,6 @@ export class Image {
     public path: string,
     public imageAlt: string,
     public opts: object,
-    public shouldDisplayImage: boolean,
   ) {
     this.buffer = Image.#getBuffer(path);
   }
@@ -132,8 +120,7 @@ async function image(token: Token, areThereOtherTokens: boolean) {
   } else {
     terminalImageOpts.width = token.attrGet("width") || "50%";
   }
-  const shouldDisplayImage = !args.values.disableImages;
-  return new Image(path, alt, terminalImageOpts, shouldDisplayImage);
+  return new Image(path, alt, terminalImageOpts);
 }
 
 const inline: Record<string, (text: string) => string> = {

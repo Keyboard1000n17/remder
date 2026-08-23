@@ -55,13 +55,15 @@ const enum FontStyle {
 let state: StateEntry[] = []; // global var
 
 export class Image {
-  public buffer: any;
+  public content: any;
+  public type: "image";
   constructor(
     public path: string,
     public imageAlt: string,
     public opts: object,
   ) {
-    this.buffer = Image.#getBuffer(path);
+    this.content = Image.#getBuffer(path);
+    this.type = "image";
   }
   static async #getBuffer(path: string) {
     try {
@@ -74,7 +76,7 @@ export class Image {
   }
   async render() {
     const path = this.path;
-    const buffer = await this.buffer;
+    const buffer = await this.content;
     if (!buffer) return Chalk.dim(this.imageAlt);
     let rendered = "";
     if (path.match(/\.svg$/)) {

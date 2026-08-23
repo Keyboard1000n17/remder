@@ -1,5 +1,9 @@
 import parseInput from "./parse-input.ts";
-import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.ts";
+import stylize, {
+  Image,
+  type HeadingObject,
+  type ProcessedToken,
+} from "./stylize.ts";
 import {
   createCliRenderer,
   Box,
@@ -13,6 +17,8 @@ import {
   createTextAttributes,
   StyledText,
   type TextTableContent,
+  ScrollBoxRenderable,
+  type VChild,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -21,6 +27,39 @@ import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 
 const tableCell = (text: string): TextChunk[] => [{ __isChunk: true, text }];
+const ansiToTextToken = (text: string) => {
+  const ansiTokens = parseAnsiSequences(text);
+  const textChunks = ansiTokens.map((ansiToken): TextChunk => {
+    return {
+      __isChunk: true,
+      text: ansiToken.value,
+      fg: ansiToken.foreground
+        ? "name" in ansiToken.foreground
+          ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
+          : "rgb" in ansiToken.foreground
+            ? RGBA.fromValues(...ansiToken.foreground.rgb)
+            : undefined
+        : undefined,
+      bg: ansiToken.background
+        ? "name" in ansiToken.background
+          ? RGBA.fromHex(colorPalette.value(ansiToken.background))
+          : "rgb" in ansiToken.background
+            ? RGBA.fromValues(...ansiToken.background.rgb)
+            : undefined
+        : undefined,
+      attributes: createTextAttributes({
+        bold: ansiToken.decorations.has("bold"),
+        italic: ansiToken.decorations.has("italic"),
+        underline: ansiToken.decorations.has("underline"),
+        dim: ansiToken.decorations.has("dim"),
+        strikethrough: ansiToken.decorations.has("strikethrough"),
+      }),
+    };
+  });
+  return Text({
+    content: new StyledText(textChunks),
+  });
+};
 const colorPalette = createColorPalette();
 
 const args = parseArgs({
@@ -32,7 +71,7 @@ const args = parseArgs({
     },
     width: {
       type: "string",
-      default: process.stdout.columns.toString() || "80",
+      default: process.stdout.columns?.toString() || "80",
       short: "w",
     },
     printToStdout: {
@@ -47,11 +86,6 @@ const args = parseArgs({
     },
   },
   allowPositionals: true,
-});
-
-const renderer = await createCliRenderer({
-  exitOnCtrlC: true,
-  width: parseInt(args.values.width),
 });
 
 async function renderTable(tableToken: ProcessedToken) {
@@ -139,49 +173,19 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             const image = element.content;
             tempComponentArray.push(
               args.values.noRenderImages
-                ? Text({ content: await image.render() })
-                : Text({ content: chalk.gray(image.imageAlt) }),
+                ? ansiToTextToken(await image.render())
+                : ansiToTextToken(chalk.gray(image.imageAlt)),
             );
           } else if (element.type === "text") {
             if (typeof element.content !== "string") throw new Error("What?");
-            const parsedAnsi = parseAnsiSequences(
+            const parsedAnsi = ansiToTextToken(
               element.content
                 .split("\n")
                 .map((line) => line.trim())
                 .filter((line) => line.length > 0)
                 .join("\n"),
             );
-            const textRenderables: TextChunk[] = [];
-            parsedAnsi.forEach((ansiToken) =>
-              textRenderables.push({
-                __isChunk: true,
-                text: ansiToken.value,
-                fg: ansiToken.foreground
-                  ? "name" in ansiToken.foreground
-                    ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
-                    : "rgb" in ansiToken.foreground
-                      ? RGBA.fromValues(...ansiToken.foreground.rgb)
-                      : undefined
-                  : undefined,
-                bg: ansiToken.background
-                  ? "name" in ansiToken.background
-                    ? RGBA.fromHex(colorPalette.value(ansiToken.background))
-                    : "rgb" in ansiToken.background
-                      ? RGBA.fromValues(...ansiToken.background.rgb)
-                      : undefined
-                  : undefined,
-                attributes: createTextAttributes({
-                  bold: ansiToken.decorations.has("bold"),
-                  italic: ansiToken.decorations.has("italic"),
-                  underline: ansiToken.decorations.has("underline"),
-                  dim: ansiToken.decorations.has("dim"),
-                  strikethrough: ansiToken.decorations.has("strikethrough"),
-                }),
-              }),
-            );
-            tempComponentArray.push(
-              Text({ content: new StyledText(textRenderables) }),
-            );
+            tempComponentArray.push(parsedAnsi);
           } else {
             throw new Error(
               `Did not recognize type ${element.type}.
@@ -203,7 +207,6 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           throw new Error("What?");
         const tokenContent: HeadingObject = token.content;
         const rows = tokenContent.headingTextArray;
-        console.log(token);
         let start = 0;
         str += "\n";
         while (start < rows[0]!.length) {
@@ -411,6 +414,11 @@ const menu = Select({
   height: "100%",
 });
 
+const renderer = await createCliRenderer({
+  exitOnCtrlC: true,
+  width: parseInt(args.values.width),
+});
+
 if (args.positionals.length > 0) {
   const filePath = args.positionals.at(-1);
   let fileContent = "";
@@ -424,13 +432,118 @@ if (args.positionals.length > 0) {
     }
   }
   const tokens = await stylize(parseInput(fileContent));
-  const renderables = await renderMarkdown(tokens as ProcessedToken[]);
-  renderables.forEach((renderable) => (renderable.marginBottom = 1));
-  const box = ScrollBox({}, renderables);
-  box.focus();
-  renderer.root.add(box);
+
+  if (args.values.printToStdout) {
+    renderer.destroy();
+    //#region tokensToString function
+    // NOTE: chatgpt made a prototype of this
+    async function tokensToString(
+      tokens: (ProcessedToken | Image)[],
+      isRecursing?: boolean,
+    ): Promise<string> {
+      return (
+        await Promise.all(
+          tokens.map(async (token): Promise<string> => {
+            if (typeof token.content === "string") {
+              return token.content
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0)
+                .join("\n");
+            } else if ("imageAlt" in token) {
+              return args.values.noRenderImages
+                ? chalk.dim(token.imageAlt)
+                : await token.render();
+            } else if (Array.isArray(token.content)) {
+              if (token.type === "bullet_list") {
+                let str = "";
+                for (const child of token.content as ProcessedToken[]) {
+                  if (child.type !== "list_item") throw new Error("Huh?");
+                  str += `\u2022 ${await tokensToString(child.content as (ProcessedToken | Image)[])}\n`;
+                }
+                return str;
+              } else if (token.type === "ordered_list") {
+                let number = token.properties.start || 1;
+                let str = "";
+                for (const child of token.content) {
+                  str += `${number}. ${await tokensToString(child.content as (ProcessedToken | Image)[])}\n`;
+                  number++;
+                }
+                return str;
+              } else if (token.type === "blockquote") {
+                let str = "";
+                for (const child of token.content) {
+                  const blockquoteContent = await tokensToString(
+                    isRecursing
+                      ? [child]
+                      : (child.content as (ProcessedToken | Image)[]),
+                    true,
+                  );
+                  str += `\u258c ${blockquoteContent
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0)
+                    .join("\n\u258c ")}\n`;
+                }
+                return str;
+              } else {
+                return await tokensToString(token.content);
+              }
+            } else if (
+              typeof token.content === "object" &&
+              "code" in token.content
+            ) {
+              return token.content.code;
+            } else if (
+              typeof token.content === "object" &&
+              !("imageAlt" in token.content) &&
+              token.type === "heading"
+            ) {
+              let str = "";
+              const tokenContent: HeadingObject = token.content;
+              const rows = tokenContent.headingTextArray;
+              let start = 0;
+              while (start < rows[0]!.length) {
+                let end = start;
+                let lineWidth = 0;
+                while (
+                  end < rows[0]!.length &&
+                  lineWidth + rows[0]![end]!.length <=
+                  parseInt(args.values.width) - 2
+                ) {
+                  lineWidth += rows[0]![end]!.length;
+                  end++;
+                }
+                for (const row of rows) {
+                  str += row.slice(start, end).join("");
+                  str += "\n";
+                }
+                str += "\n";
+                start = end;
+              }
+              str += ansiToTextToken(tokenContent.links);
+              return str;
+            }
+            return "";
+          }),
+        )
+      ).join("\n");
+    }
+    //#endregion
+    const content = await tokensToString(tokens);
+    console.log(
+      Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
+    );
+    process.exit(0);
+  } else {
+    const renderables = await renderMarkdown(tokens as ProcessedToken[]);
+    renderables.forEach((renderable) => (renderable.marginBottom = 1));
+    const box = ScrollBox({}, renderables);
+    box.focus();
+    renderer.root.add(box);
+  }
 } else {
   menu.focus();
   renderer.root.add(menu);
+  if (args.values.debug) renderer.console.toggle();
 }
-if (args.values.debug) renderer.console.toggle();

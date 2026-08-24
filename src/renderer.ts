@@ -522,14 +522,6 @@ const menu = Select({
   height: "100%",
 });
 
-const terminalInput =
-  process.stdin.isTTY && process.platform !== "win32"
-    ? process.stdin
-    : new (await import("node:tty")).ReadStream(openSync("/dev/tty", "r+"));
-
-terminalInput.setRawMode?.(true);
-terminalInput.resume();
-
 if (process.platform === "win32") {
   args.values.printToStdout = true;
 }
@@ -543,6 +535,13 @@ if (!process.stdin.isTTY && args.values.printToStdout) {
   );
   process.exit(0);
 }
+
+const terminalInput = process.stdin.isTTY
+  ? process.stdin
+  : new (await import("node:tty")).ReadStream(openSync("/dev/tty", "r+"));
+
+terminalInput.setRawMode?.(true);
+terminalInput.resume();
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,

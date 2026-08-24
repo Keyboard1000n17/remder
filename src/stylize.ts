@@ -5,7 +5,6 @@ import got from "got";
 import { Resvg } from "@resvg/resvg-js";
 import type Token from "markdown-it/lib/token.mjs";
 import * as Shiki from "shiki";
-import { parseArgs } from "node:util";
 
 const glyphs = await Bun.file(`${import.meta.dir}/chars.json`).json();
 
@@ -28,22 +27,31 @@ type Handlers = {
     | HeadingObject
   >;
 };
+
 export type HeadingObject = {
   headingTextArray: string[][];
   links: string;
 };
-export type ProcessedToken = {
+
+export interface ProcessedToken {
   type: string;
   content:
   | string
   | Image
   | (ProcessedToken | Image)[]
   | { code: string; language: string }
+  | TableToken[][]
   | HeadingObject;
   properties: {
     [type: string]: any;
   };
-};
+}
+
+export interface TableToken extends ProcessedToken {
+  type: "table-cell";
+  content: (ProcessedToken | Image)[];
+  properties: { textAlign: "left" | "center" | "right" };
+}
 
 const enum FontStyle {
   Italic = 1,
@@ -57,6 +65,7 @@ let state: StateEntry[] = []; // global var
 export class Image {
   public content: any;
   public type: "image";
+  public properties: {};
   constructor(
     public path: string,
     public imageAlt: string,
@@ -64,6 +73,7 @@ export class Image {
   ) {
     this.content = Image.#getBuffer(path);
     this.type = "image";
+    this.properties = {};
   }
   static async #getBuffer(path: string) {
     try {
@@ -472,7 +482,25 @@ function removeWhitespaceTokens(
 ): (ProcessedToken | Image)[] {
   return tokens
     .map((token) => {
-      if (!("imageAlt" in token) && Array.isArray(token.content)) {
+      if (
+        token.type === "table" &&
+        Array.isArray(token.content) &&
+        token.content.every((row) => Array.isArray(row))
+      ) {
+        return {
+          ...token,
+          content: token.content.map((row) =>
+            row.map((cell) => {
+              return { ...cell, content: removeWhitespaceTokens(cell.content) };
+            }),
+          ),
+        };
+      }
+      if (
+        !("imageAlt" in token) &&
+        Array.isArray(token.content) &&
+        !token.content.every((row) => Array.isArray(row))
+      ) {
         return {
           ...token,
           content: removeWhitespaceTokens(token.content),
@@ -481,7 +509,7 @@ function removeWhitespaceTokens(
       return token;
     })
     .filter((token) => {
-      if (!("imageAlt" in token)) {
+      if (!("imageAlt" in token) && !Array.isArray(token)) {
         if (typeof token.content === "string") {
           return token.content.trim() !== "";
         }

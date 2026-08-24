@@ -89,13 +89,13 @@ const args = parseArgs({
 });
 
 async function renderTable(tableToken: ProcessedToken) {
-  const rows = [];
+  const rows: TextChunk[][][] = [];
   if (!Array.isArray(tableToken.content))
     throw new Error(
       `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
     );
   for (const row of tableToken.content) {
-    const cells = [];
+    const cells: TextChunk[][] = [];
     if (!Array.isArray(row))
       throw new Error(
         `Table token type is somehow ${typeof row} instead of an array!`,
@@ -126,10 +126,13 @@ async function renderTable(tableToken: ProcessedToken) {
         }
         cells.push(tableCell(cellText));
       }
-      rows.push(cells);
     }
+    rows.push(cells);
   }
+  // console.log("TABLE:");
   // rows.forEach((cells) => cells.forEach((cell) => console.log(cell)));
+  // console.log("TABLE ORIGINAL CONTENT:");
+  // console.log(tableToken.content);
   return rows;
 }
 
@@ -253,7 +256,11 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
       case "table":
         componentArray.push(
           new TextTableRenderable(renderer, {
-            content: (await renderTable(token)) as TextTableContent,
+            content: await renderTable(token),
+            maxWidth: parseInt(args.values.width) - 1,
+            cellPaddingX: 1,
+            columnWidthMode: "content",
+            columnFitter: "balanced",
           }),
         );
         break;

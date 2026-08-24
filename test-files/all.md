@@ -100,7 +100,7 @@ Too bad i don't expect much from it.
   </thead>
   <tbody>
     <tr>
-      <td>god-awful</td>
+      <td>be god-awful</td>
       <td>to parse</td>
     </tr>
   </tbody>

@@ -16,18 +16,15 @@ import {
   RGBA,
   createTextAttributes,
   StyledText,
-  type TextTableContent,
-  ScrollBoxRenderable,
-  type VChild,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
 import chalk from "chalk";
 import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
+import { openSync } from "node:fs";
 
-const tableCell = (text: string): TextChunk[] => [{ __isChunk: true, text }];
-const ansiToTextToken = (text: string) => {
+const ansiToTextChunks = (text: string) => {
   const ansiTokens = parseAnsiSequences(text);
   const textChunks = ansiTokens.map((ansiToken): TextChunk => {
     return {
@@ -56,17 +53,22 @@ const ansiToTextToken = (text: string) => {
       }),
     };
   });
+  return textChunks;
+};
+
+const ansiToTextToken = (text: string) => {
   return Text({
-    content: new StyledText(textChunks),
+    content: new StyledText(ansiToTextChunks(text)),
   });
 };
+
 const colorPalette = createColorPalette();
 
 const args = parseArgs({
   options: {
     noRenderImages: {
       type: "boolean",
-      default: true,
+      default: false,
       short: "i",
     },
     width: {
@@ -102,9 +104,7 @@ async function renderTable(tableToken: ProcessedToken) {
       );
     for (const cell of row) {
       if (cell.type !== "table-cell") {
-        throw new Error(
-          chalk.red.bold(`Cell type was ${cell.type} instead of "table-cell"!`),
-        );
+        throw new Error(`Cell type was ${cell.type} instead of "table-cell"!`);
       }
       for (const item of cell.content) {
         let cellText = "";
@@ -114,17 +114,18 @@ async function renderTable(tableToken: ProcessedToken) {
               `The type of the table cell content was ${typeof item.content} instead of string!`,
             );
           }
-          cellText += item.content;
+          cellText +=
+            rows.length === 0 ? chalk.bold(item.content) : item.content;
         } else if (item.type === "image") {
-          cellText += await item.content.render();
+          cellText += args.values.noRenderImages
+            ? chalk.gray(item.content.imageAlt)
+            : await item.content.render();
         } else {
           throw new Error(
-            chalk.red.bold(
-              `Type not recognized: expected "text" or "image" but got ${item.type}`,
-            ),
+            `Type not recognized: expected "text" or "image" but got ${item.type}`,
           );
         }
-        cells.push(tableCell(cellText));
+        cells.push(ansiToTextChunks(cellText));
       }
     }
     rows.push(cells);
@@ -134,6 +135,105 @@ async function renderTable(tableToken: ProcessedToken) {
   // console.log("TABLE ORIGINAL CONTENT:");
   // console.log(tableToken.content);
   return rows;
+}
+
+// NOTE: chatgpt made a prototype of this
+async function tokensToString(
+  tokens: (ProcessedToken | Image)[],
+  isRecursing?: boolean,
+): Promise<string> {
+  return (
+    await Promise.all(
+      tokens.map(async (token): Promise<string> => {
+        if (typeof token.content === "string") {
+          return token.content
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+            .join("\n");
+        } else if ("imageAlt" in token) {
+          return args.values.noRenderImages
+            ? await token.render()
+            : chalk.dim(token.imageAlt);
+        } else if (
+          Array.isArray(token.content) &&
+          !token.content.every((arr) => Array.isArray(arr))
+        ) {
+          if (token.type === "bullet_list") {
+            let str = "";
+            for (const child of token.content as ProcessedToken[]) {
+              if (child.type !== "list_item") throw new Error("Huh?");
+              str += `\u2022 ${await tokensToString(child.content as (ProcessedToken | Image)[])}\n`;
+            }
+            return str;
+          } else if (token.type === "ordered_list") {
+            let number = token.properties.start || 1;
+            let str = "";
+            for (const child of token.content) {
+              const content = Array.isArray(child) ? child : child.content;
+              str += `${number}. ${await tokensToString(content)}\n`;
+              number++;
+            }
+            return str;
+          } else if (token.type === "blockquote") {
+            let str = "";
+            for (const child of token.content) {
+              if (Array.isArray(child)) continue;
+              const blockquoteContent = await tokensToString(
+                isRecursing
+                  ? [child]
+                  : (child.content as (ProcessedToken | Image)[]),
+                true,
+              );
+              str += `\u258c ${blockquoteContent
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0)
+                .join("\n\u258c ")}\n`;
+            }
+            return str;
+          } else {
+            return await tokensToString(token.content);
+          }
+        } else if (
+          typeof token.content === "object" &&
+          "code" in token.content
+        ) {
+          return token.content.code;
+        } else if (
+          typeof token.content === "object" &&
+          !("imageAlt" in token.content) &&
+          token.type === "heading"
+        ) {
+          let str = "";
+          const tokenContent = token.content as HeadingObject;
+          const rows = tokenContent.headingTextArray;
+          let start = 0;
+          while (start < rows[0]!.length) {
+            let end = start;
+            let lineWidth = 0;
+            while (
+              end < rows[0]!.length &&
+              lineWidth + rows[0]![end]!.length <=
+              parseInt(args.values.width) - 2
+            ) {
+              lineWidth += rows[0]![end]!.length;
+              end++;
+            }
+            for (const row of rows) {
+              str += row.slice(start, end).join("");
+              str += "\n";
+            }
+            str += "\n";
+            start = end;
+          }
+          str += ansiToTextToken(tokenContent.links);
+          return str;
+        }
+        return "";
+      }),
+    )
+  ).join("\n");
 }
 
 export async function renderMarkdown(tokens: ProcessedToken[]) {
@@ -168,7 +268,8 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         for (const element of content) {
           if ("imageAlt" in element)
             continue; // this shouldn't be possible?
-          else if (
+          else if (Array.isArray(element)) {
+          } else if (
             element.type === "image" &&
             typeof element.content === "object" &&
             "imageAlt" in element.content
@@ -176,8 +277,8 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             const image = element.content;
             tempComponentArray.push(
               args.values.noRenderImages
-                ? ansiToTextToken(await image.render())
-                : ansiToTextToken(chalk.gray(image.imageAlt)),
+                ? ansiToTextToken(chalk.gray(image.imageAlt))
+                : ansiToTextToken(await image.render()),
             );
           } else if (element.type === "text") {
             if (typeof element.content !== "string") throw new Error("What?");

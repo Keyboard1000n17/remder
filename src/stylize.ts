@@ -337,6 +337,7 @@ export async function codeBlock(token: Token) {
       code: stylizedCodeArr.join("\n"),
       language: shikiTokens.grammarState?.lang ?? "plain",
     };
+    console.log("STYLIZE.TS:", stylizedCodeArr.join("\n"));
     return code;
   } else {
     return {

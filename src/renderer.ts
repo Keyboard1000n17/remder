@@ -24,6 +24,12 @@ import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
 
+const rgbToRGBA = ([r, g, b]: [number, number, number]): [
+  number,
+  number,
+  number,
+] => [r / 255, g / 255, b / 255];
+
 const ansiToTextChunks = (text: string) => {
   const ansiTokens = parseAnsiSequences(text);
   const textChunks = ansiTokens.map((ansiToken): TextChunk => {
@@ -34,14 +40,14 @@ const ansiToTextChunks = (text: string) => {
         ? "name" in ansiToken.foreground
           ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
           : "rgb" in ansiToken.foreground
-            ? RGBA.fromValues(...ansiToken.foreground.rgb)
+            ? RGBA.fromValues(...rgbToRGBA(ansiToken.foreground.rgb))
             : undefined
         : undefined,
       bg: ansiToken.background
         ? "name" in ansiToken.background
           ? RGBA.fromHex(colorPalette.value(ansiToken.background))
           : "rgb" in ansiToken.background
-            ? RGBA.fromValues(...ansiToken.background.rgb)
+            ? RGBA.fromValues(...rgbToRGBA(ansiToken.background.rgb))
             : undefined
         : undefined,
       attributes: createTextAttributes({
@@ -56,7 +62,7 @@ const ansiToTextChunks = (text: string) => {
   return textChunks;
 };
 
-const ansiToTextToken = (text: string) => {
+export const ansiToTextToken = (text: string) => {
   return Text({
     content: new StyledText(ansiToTextChunks(text)),
   });
@@ -458,39 +464,43 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         );
         break;
       //#endregion
+      //#region code block
+      case "codeBlock":
+        const codeTokenContent = token.content as {
+          code: string;
+          language: string;
+        };
+        console.log(
+          "CODE:",
+          new StyledText(ansiToTextChunks(codeTokenContent.code)).chunks.map(
+            (chunk) => chunk.fg,
+          ),
+        );
+        const box = Box(
+          {
+            paddingLeft: 2,
+            paddingRight: 2,
+            marginLeft: 1,
+            rowGap: 1,
+            backgroundColor: "#181825",
+            width: "auto",
+            minWidth: 40,
+            flexShrink: 0,
+            flexGrow: 0,
+            alignSelf: "flex-start",
+          },
+          Text({ content: `\ueac4 ${codeTokenContent.language}` }),
+          Text({
+            content: new StyledText(ansiToTextChunks(codeTokenContent.code)),
+          }),
+        );
+        componentArray.push(box);
+        break;
+      //#endregion
       //#region default
       default:
         console.log("DEFAULT CASE:", token);
-        const parsedAnsi = parseAnsiSequences(String(token.content));
-        const textRenderables: TextChunk[] = [];
-        parsedAnsi.forEach((ansiToken) =>
-          textRenderables.push({
-            __isChunk: true,
-            text: ansiToken.value,
-            fg: ansiToken.foreground
-              ? "name" in ansiToken.foreground
-                ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
-                : "rgb" in ansiToken.foreground
-                  ? RGBA.fromValues(...ansiToken.foreground.rgb)
-                  : undefined
-              : undefined,
-            bg: ansiToken.background
-              ? "name" in ansiToken.background
-                ? RGBA.fromHex(colorPalette.value(ansiToken.background))
-                : "rgb" in ansiToken.background
-                  ? RGBA.fromValues(...ansiToken.background.rgb)
-                  : undefined
-              : undefined,
-            attributes: createTextAttributes({
-              bold: ansiToken.decorations.has("bold"),
-              italic: ansiToken.decorations.has("italic"),
-              underline: ansiToken.decorations.has("underline"),
-              dim: ansiToken.decorations.has("dim"),
-              strikethrough: ansiToken.decorations.has("strikethrough"),
-            }),
-          }),
-        );
-        componentArray.push(Text({ content: new StyledText(textRenderables) }));
+        componentArray.push(ansiToTextToken(String(token.content)));
       //#endregion
     }
     //#endregion
@@ -586,7 +596,12 @@ if (args.positionals.length > 0) {
   const renderables = await renderMarkdown(tokens as ProcessedToken[]);
   renderables.forEach((renderable) => (renderable.marginBottom = 1));
   const box = ScrollBox(
-    { width: parseInt(args.values.width), height: "100%" },
+    {
+      width: parseInt(args.values.width),
+      height: "100%",
+      alignItems: "flex-start",
+      flexDirection: "column",
+    },
     renderables,
   );
   box.focus();

@@ -23,7 +23,6 @@ import chalk from "chalk";
 import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
-import { color } from "bun";
 
 const languageToNerdFontIconMap: Record<string, string> = {
   "angular-html": "\ued4b",

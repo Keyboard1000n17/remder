@@ -1,10 +1,11 @@
 import MarkdownIt from "markdown-it";
 import GithubAlerts from "markdown-it-github-alerts";
 import { Parser } from "htmlparser2";
-import Token from "markdown-it/lib/token.mjs";
 import { Chalk } from "chalk";
 
 const chalk = new Chalk();
+const TokenClass = MarkdownIt.Token;
+type Token = InstanceType<typeof TokenClass>;
 
 const aliases = new Map(
   Object.entries({
@@ -69,7 +70,7 @@ const htmlToTokens: Token[] = []; // the htmlParser pushes to this array
 
 const htmlParser = new Parser({
   onopentag(name: string, attributes) {
-    const openingToken = new Token("", name, 1);
+    const openingToken = new TokenClass("", name, 1);
     const isTagDisallowed = name.match(
       /title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext/,
     );
@@ -97,7 +98,7 @@ const htmlParser = new Parser({
     if (isPreviousTagDisallowed) {
       sanitizedText += text;
     } else {
-      const textToken = new Token("text", "", 0);
+      const textToken = new TokenClass("text", "", 0);
       textToken.content = text;
       htmlToTokens.push(textToken);
     }
@@ -109,7 +110,7 @@ const htmlParser = new Parser({
     } else if (isPreviousTagDisallowed) {
       sanitizedText += `</${name}>`;
     } else {
-      const closingToken = new Token(
+      const closingToken = new TokenClass(
         `${aliases.get(name) ?? name}_close`,
         name,
         -1,
@@ -153,8 +154,8 @@ export default function parse(input: string) {
     langPrefix: "langauge-",
     html: true,
     linkify: true,
-  });
-  md.use(GithubAlerts);
+  })
+    .use(GithubAlerts)
   // doing type:any is fine here
   md.core.ruler.after("inline", "processHTML", (state: any) => {
     const parsedTokens: Token[] = [];
@@ -184,7 +185,7 @@ export default function parse(input: string) {
       if (parsedToken.nesting === 1) level++;
       if (parsedToken.block) {
         if (inlineTokenList.length > 0) {
-          const inlineToken = new Token("inline", "", 0);
+          const inlineToken = new TokenClass("inline", "", 0);
           inlineToken.block = true;
           const codeTokenIndex = inlineTokenList.findIndex(
             (token) => token.type === "code_open",
@@ -194,7 +195,7 @@ export default function parse(input: string) {
             inlineTokenList[codeTokenIndex + 1]?.type === "text" &&
             inlineTokenList[codeTokenIndex + 2]?.type === "code_close"
           ) {
-            const codeToken = new Token("code_inline", "code", 0);
+            const codeToken = new TokenClass("code_inline", "code", 0);
             const codeTextToken: Token | undefined =
               inlineTokenList[codeTokenIndex + 1];
             if (!codeTextToken) {
@@ -220,7 +221,7 @@ export default function parse(input: string) {
     });
     // just in case if inlineTokenList isn't empty
     if (inlineTokenList.length > 0) {
-      const inlineToken = new Token("inline", "", 0);
+      const inlineToken = new TokenClass("inline", "", 0);
       inlineToken.block = true;
       inlineToken.children = inlineTokenList.splice(0); // this empties inlineTokenList
       const firstChild = inlineToken.children[0];

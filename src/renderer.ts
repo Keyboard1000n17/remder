@@ -23,6 +23,7 @@ import chalk from "chalk";
 import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
+import { color } from "bun";
 
 const languageToNerdFontIconMap: Record<string, string> = {
   "angular-html": "\ued4b",
@@ -115,7 +116,7 @@ const languageToNerdFontIconMap: Record<string, string> = {
   rel: "\ueb58",
   ron: "\ueab4",
   ruby: "\ueb48",
-  rust: "\uebc1",
+  rust: "\ue68b",
   sas: "\ue74b",
   sass: "\ue74b",
   scala: "\ue737",
@@ -140,6 +141,8 @@ const languageToNerdFontIconMap: Record<string, string> = {
   vala: "\ue8d1",
   vim: "\ue6ae",
   vue: "\ue8dc",
+  "vue-html": "\ue8dc",
+  "vue-vine": "\ue8dc",
   vyper: "\ue8df",
   wolfram: "\ue956",
   xml: "\ue8ea",
@@ -185,7 +188,7 @@ const ansiToTextChunks = (text: string) => {
   return textChunks;
 };
 
-export const ansiToTextToken = (text: string) => {
+const ansiToTextToken = (text: string) => {
   return Text({
     content: new StyledText(ansiToTextChunks(text)),
   });
@@ -586,6 +589,52 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           ),
         );
         break;
+      //#endregion
+      //#region alerts
+      case "alert": {
+        const alertIcons: Record<string, { icon: string; color: string }> = {
+          Note: { icon: "\uf129", color: "#6af" },
+          Tip: { icon: "\uf400", color: "#3b4" },
+          Important: { icon: "\uf12a", color: "#96f" },
+          Warning: { icon: "\uea6c", color: "#dd4" },
+          Caution: { icon: "\u{f0ce6}", color: "#f44" },
+        };
+        const alertContent = await renderMarkdown(
+          token.content as ProcessedToken[],
+        );
+        const uhb = "\u258c"; // unicode left half block
+        const alertType = token.properties.alertType;
+        const alertIconAndColor = alertIcons[alertType];
+        componentArray.push(
+          Box(
+            {
+              border: ["left"],
+              paddingLeft: 1,
+              customBorderChars: {
+                bottomLeft: uhb,
+                bottomRight: uhb,
+                topLeft: uhb,
+                topRight: uhb,
+                vertical: uhb,
+                horizontal: uhb,
+                topT: uhb,
+                bottomT: uhb,
+                leftT: uhb,
+                rightT: uhb,
+                cross: uhb,
+              },
+              rowGap: 1,
+              borderColor: RGBA.fromHex(alertIconAndColor?.color || ""),
+            },
+            Text({
+              content: `${alertIconAndColor?.icon} ${alertType}`,
+              fg: RGBA.fromHex(alertIconAndColor?.color || ""),
+            }),
+            ...alertContent,
+          ),
+        );
+        break;
+      }
       //#endregion
       //#region code block
       case "codeBlock":

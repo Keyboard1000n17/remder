@@ -399,6 +399,18 @@ export async function table(tokens: Token[]) {
   return tableRows;
 }
 
+async function alerts(tokens: Token[]) {
+  const children = tokens.slice(1, -2);
+  const stylizedChildren = await stylize(children);
+  return {
+    type: "alert",
+    content: stylizedChildren,
+    properties: {
+      alertType: tokens[0]?.meta.title || "",
+    },
+  } as ProcessedToken;
+}
+
 async function details(tokens: Token[]) {
   const tokenStack = [];
   const firstToken: Token | undefined = tokens[0];
@@ -528,14 +540,13 @@ export default async function stylize(input: Token[]) {
   let index = 0;
 
   while (index < input.length) {
-    const push: ProcessedToken = {
+    let push: ProcessedToken = {
       type: "",
       content: "",
       properties: {},
     };
     let token = input[index];
-    if (!token)
-      throw new Error(Chalk.bold.red(`Token at ${index} is not defined!!!`));
+    if (!token) throw new Error(`Token at ${index} is not defined!!!`);
 
     // give attrs
     if (token.attrs) {
@@ -544,29 +555,29 @@ export default async function stylize(input: Token[]) {
       }
     }
 
-    if (!token.type) {
-      throw new Error(
-        Chalk.bold.red(`Type of token at index ${index} is ${token?.type}!`),
-      );
-    }
-
-    if (token.type.match(/_open/)) {
+    if (token.type === "alert_open") {
+      const accumulatedTokens = [];
+      while (input[index]?.type !== "alert_close") {
+        accumulatedTokens.push(input[index]);
+        index++;
+      }
+      // index++;
+      accumulatedTokens.push(input[index]); // should push a token with type "alert_close"
+      const processedAlertToken = await alerts(accumulatedTokens as Token[]);
+      push = processedAlertToken;
+    } else if (token.type.match(/_open/)) {
       const accumulatedTokens: Token[] = [];
       index++;
       const tokenType = token.type.replace("_open", "");
       if (!input[index]) {
         throw new Error(
-          Chalk.red.bold(
-            `Token at index ${index} is undefined. The length of the input array is ${input.length} `,
-          ),
+          `Token at index ${index} is undefined. The length of the input array is ${input.length} `,
         );
       }
-
       while (input[index] && input[index]!.level !== token.level) {
         accumulatedTokens.push(input[index]!);
         index++;
       }
-
       const handler: ((tokens: Token[]) => Promise<any>) | undefined =
         handleTokens[tokenType];
       state.push(tokenType);
@@ -582,6 +593,7 @@ export default async function stylize(input: Token[]) {
         accumulatedTokenContentString = "";
       } else if (accumulatedTokens.length > 0) {
         await handleTokens.default!(accumulatedTokens);
+        stylize;
       }
       state.pop();
     } else if (token.type === "fence" || token.type === "code_block") {

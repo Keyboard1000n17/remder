@@ -226,6 +226,8 @@ async function renderInline(tokens: Token[]) {
           //#region inline code
           text += inline.code!(` ${child.content} `);
           //#endregion
+        } else if (type === "emoji") {
+          text += child.content;
         } else if (type === "text") {
           //#region text
           const nesting = state.slice(state.indexOf("inline") + 1);
@@ -561,7 +563,6 @@ export default async function stylize(input: Token[]) {
         accumulatedTokens.push(input[index]);
         index++;
       }
-      // index++;
       accumulatedTokens.push(input[index]); // should push a token with type "alert_close"
       const processedAlertToken = await alerts(accumulatedTokens as Token[]);
       push = processedAlertToken;

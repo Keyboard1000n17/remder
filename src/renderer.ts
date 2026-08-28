@@ -193,6 +193,46 @@ const ansiToTextToken = (text: string) => {
   });
 };
 
+function makeTaskList(item: ProcessedToken) {
+  if (item.type !== "list_item") throw new Error("");
+  console.log(`Called makeTaskList(), passed arg:\n${item}`);
+  const content: ProcessedToken[] = [];
+  for (const child of item.content as ProcessedToken[]) {
+    switch (child.type) {
+      case "paragraph":
+        (child.content as ProcessedToken[]).forEach((text) => {
+          if (typeof text.content === "string") {
+            const startsWith = text.content.match(/^\[[ xX]\]\s*/);
+            const replace = (text: string, toReplace: string) =>
+              toReplace.trim().toLowerCase() === "[x]"
+                ? text.replace(toReplace, chalk.bgGray(" \uf00c ") + " ")
+                : text.replace("[ ]", chalk.bgGray("   "));
+            content.push({
+              ...text,
+              content: startsWith?.[0]
+                ? replace(text.content, startsWith[0])
+                : text.content,
+            });
+          } else {
+            content.push(text);
+          }
+        });
+        break;
+      case "bullet_list":
+        content.push({
+          ...child,
+          content: Array.isArray(child.content)
+            ? (child.content as ProcessedToken[]).map((t) => makeTaskList(t))
+            : child.content,
+        });
+        break;
+      default:
+        content.push(child);
+    }
+  }
+  return { ...item, content };
+}
+
 const colorPalette = createColorPalette();
 
 const args = parseArgs({
@@ -378,13 +418,13 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
       case "text":
         if (typeof token.content === "string") {
           componentArray.push(
-            Text({
-              content: token.content
+            ansiToTextToken(
+              token.content
                 .trim()
                 .split("\n")
                 .map((line) => line.trim())
                 .join("\n"),
-            }),
+            ),
           );
           break;
         }
@@ -510,8 +550,10 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             throw new Error(
               `The contents of this list item were somehow not an array.`,
             );
+          const transformedListItem = makeTaskList(listItem);
+          const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(
-            listItem.content as ProcessedToken[],
+            listContent.flat() as ProcessedToken[],
           );
           for (const listRenderable of listRenderables) {
             bulletListItems.push(
@@ -538,8 +580,10 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             throw new Error(
               `Expected type "list_item" but got ${listItem.type}`,
             );
+          const transformedListItem = makeTaskList(listItem);
+          const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(
-            listItem.content as ProcessedToken[],
+            listContent.flat() as ProcessedToken[],
           );
           for (const listRenderable of listRenderables) {
             orderedListItems.push(

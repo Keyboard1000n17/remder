@@ -3,7 +3,7 @@ import terminalLink from "terminal-link";
 import terminalImage from "terminal-image";
 import got from "got";
 import { Resvg } from "@resvg/resvg-js";
-import type Token from "markdown-it/lib/token.mjs";
+import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
 
 const glyphs = await Bun.file(`${import.meta.dir}/chars.json`).json();
@@ -132,7 +132,7 @@ async function image(token: Token, areThereOtherTokens: boolean) {
   } else {
     terminalImageOpts.width = token.attrGet("width") || "50%";
   }
-  return new Image(path, alt, terminalImageOpts);
+  return new Image(String(path), String(alt), terminalImageOpts);
 }
 
 const inline: Record<string, (text: string) => string> = {
@@ -173,11 +173,11 @@ async function renderInline(tokens: Token[]) {
               Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
             );
           const linkText = linkTextToken.content;
-          text += Chalk.underline(terminalLink(linkText, linkUrl));
+          text += Chalk.underline(terminalLink(linkText, String(linkUrl)));
           //#endregion
         } else if (type === "abbr_open") {
           //#region abbreviations
-          const abbreviation = child.attrGet("title");
+          const abbreviation = String(child.attrGet("title"));
           i++;
           const abbrTextToken = token.children[i];
           if (!abbrTextToken)
@@ -278,7 +278,7 @@ function heading(token: Token) {
     const child = children[index];
     if (!child) throw new Error("Something went wrong, this shouldn't happen.");
     if (child.type === "link_open") {
-      const linkUrl = child.attrGet("href") ?? "";
+      const linkUrl = String(child.attrGet("href")) ?? "";
       index++;
       const linkTextToken = children[index];
       if (!linkTextToken)
@@ -375,11 +375,15 @@ export async function table(tokens: Token[]) {
       if (currentRow) tableRows.push(currentRow.splice(0));
     },
     th_open: (token: Token): void => {
-      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
+      const alignMatch = String(token.attrGet("style"))?.match(
+        /text-align:\s*(\w+)/,
+      );
       currentAlign = alignMatch?.[1] ?? "center";
     },
     td_open: (token: Token): void => {
-      const alignMatch = token.attrGet("style")?.match(/text-align:\s*(\w+)/);
+      const alignMatch = String(token.attrGet("style"))?.match(
+        /text-align:\s*(\w+)/,
+      );
       currentAlign = alignMatch?.[1] ?? "left";
     },
     inline: async (token: Token): Promise<void> => {
@@ -408,7 +412,7 @@ async function alerts(tokens: Token[]) {
     type: "alert",
     content: stylizedChildren,
     properties: {
-      alertType: tokens[0]?.meta.title || "",
+      alertType: tokens[0]?.meta?.title || "",
     },
   } as ProcessedToken;
 }

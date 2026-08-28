@@ -7,7 +7,6 @@
       "dependencies": {
         "@opentui/core": "^0.5.8",
         "@resvg/resvg-js": "^2.6.2",
-        "@types/markdown-it-emoji": "^3.0.1",
         "ansi-sequence-parser": "^1.1.3",
         "chalk": "^5.6.2",
         "got": "^15.1.0",
@@ -15,14 +14,13 @@
         "markdown-it": "^15.0.0",
         "markdown-it-emoji": "^3.1.0",
         "markdown-it-github-alerts": "^1.0.1",
-        "markdown-it-sanitizer": "^0.4.3",
-        "markdown-it-task-lists": "^2.1.1",
         "shiki": "^4.4.3",
         "terminal-image": "^4.3.0",
         "terminal-link": "^5.0.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "@types/markdown-it-emoji": "^3.0.1",
         "@types/node": "^26.3.0",
       },
       "peerDependencies": {
@@ -314,10 +312,6 @@
     "markdown-it-emoji": ["markdown-it-emoji@3.1.0", "", {}, "sha512-NhmMEH2ywduD4Nty1E8uB5NqfLhAT1VR0dyvoJyStKOqCzbZmVdn/+8wj7zpDsb/fLBikpCPsWwxqKlvMmbz4g=="],
 
     "markdown-it-github-alerts": ["markdown-it-github-alerts@1.0.1", "", { "peerDependencies": { "markdown-it": ">= 13.0.0" } }, "sha512-NNATF4QdoGI07hyCitoB2YqJ1YcNVCKT89ut2VtfFY9rkeFCXe/V2lOonKQLpJiq5DjiZZepf97BJx5xOjFIAw=="],
-
-    "markdown-it-sanitizer": ["markdown-it-sanitizer@0.4.3", "", {}, "sha512-0Q2ua8+oDN7/3r5UXMnbVq8C+LRfT2pzVKA+h4nXTLEMBFQDwp7qJZOe7DkBa79C7V2cSBXJyScxJ7vYs9kE2w=="],
-
-    "markdown-it-task-lists": ["markdown-it-task-lists@2.1.1", "", {}, "sha512-TxFAc76Jnhb2OUu+n3yz9RMu4CwGfaT788br6HhEDlvWfdeJcLUsxk1Hgw2yJio0OXsxv7pyIPmvECY7bMbluA=="],
 
     "marked": ["marked@17.0.1", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg=="],
 

@@ -247,6 +247,11 @@ const args = parseArgs({
       default: process.stdout.columns?.toString() || "80",
       short: "w",
     },
+    height: {
+      type: "string",
+      default: process.stdout.rows?.toString() || "25",
+      short: "c",
+    },
     printToStdout: {
       type: "boolean",
       default: false,
@@ -772,6 +777,7 @@ terminalInput.resume();
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
   width: parseInt(args.values.width),
+  height: parseInt(args.values.height),
   stdin: terminalInput,
 });
 
@@ -814,9 +820,7 @@ if (args.positionals.length > 0) {
   const box = ScrollBox(
     {
       width: parseInt(args.values.width),
-      height: "100%",
-      alignItems: "flex-start",
-      flexDirection: "column",
+      height: parseInt(args.values.height),
     },
     renderables,
   );

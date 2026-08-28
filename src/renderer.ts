@@ -806,7 +806,7 @@ if (args.positionals.length > 0) {
     const renderables = await renderMarkdown(tokens as ProcessedToken[]);
     renderables.forEach((renderable) => (renderable.marginBottom = 1));
     const box = ScrollBox(
-      { width: parseInt(args.values.width), height: "100%" },
+      { width: parseInt(args.values.width), height: renderer.height - 1 },
       renderables,
     );
     box.focus();
@@ -820,7 +820,7 @@ if (args.positionals.length > 0) {
   const box = ScrollBox(
     {
       width: parseInt(args.values.width),
-      height: parseInt(args.values.height),
+      height: renderer.height - 1,
     },
     renderables,
   );
@@ -831,3 +831,35 @@ if (args.positionals.length > 0) {
   renderer.root.add(menu);
 }
 if (args.values.debug) renderer.console.toggle();
+const bottomBar = Box(
+  {
+    width: "100%",
+    height: 1,
+    flexDirection: "row",
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    backgroundColor: RGBA.fromInts(40, 40, 40),
+  },
+  Box(
+    {
+      paddingLeft: 1,
+      paddingRight: 1,
+      backgroundColor: RGBA.fromHex("#089916"),
+      columnGap: 1,
+    },
+    Text({
+      content: "reMDer",
+      attributes: createTextAttributes({ bold: true, italic: true }),
+    }),
+  ),
+);
+if (args.positionals.at(-1))
+  bottomBar.add(
+    Text({
+      content: args.positionals.at(-1),
+      attributes: createTextAttributes({ dim: true }),
+      marginLeft: 1,
+    }),
+  );
+renderer.root.add(bottomBar);

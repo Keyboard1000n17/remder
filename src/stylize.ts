@@ -18,6 +18,7 @@ type TerminalImageOpts = {
 type Handlers = {
   [type: string]: (
     token: Token[],
+    level?: number,
   ) => Promise<
     | ProcessedToken
     | (ProcessedToken | Image)[]
@@ -31,6 +32,8 @@ type Handlers = {
 export type HeadingObject = {
   headingTextArray: string[][];
   links: string;
+  text: string;
+  level: number;
 };
 
 export interface ProcessedToken {
@@ -261,7 +264,7 @@ async function renderInline(tokens: Token[]) {
   return styled;
 }
 
-function heading(token: Token) {
+function heading(token: Token, level = 1) {
   if (token?.type !== "inline")
     throw new Error(
       Chalk.red.bold(
@@ -302,6 +305,8 @@ function heading(token: Token) {
   const obj: HeadingObject = {
     headingTextArray: grid,
     links: "",
+    text: text,
+    level: level,
   };
   for (let link of links) {
     const builtLink = `\n${link.text}: ${terminalLink(link.url, link.url, { fallback: false })} `;
@@ -464,7 +469,8 @@ const handleTokens: Handlers = {
   },
   paragraph: async (tokens: Token[]) => await renderInline(tokens), // it's always just one inline token
   table: async (tokens: Token[]) => await table(tokens),
-  heading: async (tokens: Token[]) => heading(tokens[0]!),
+  heading: async (tokens: Token[], level?: number | 1) =>
+    heading(tokens[0]!, level),
   div: async (tokens: Token[]) => await stylize(tokens),
   blockquote: async (tokens: Token[]) => await stylize(tokens),
   bullet_list: async (tokens: Token[]) => await stylize(tokens),
@@ -583,12 +589,19 @@ export default async function stylize(input: Token[]) {
         accumulatedTokens.push(input[index]!);
         index++;
       }
-      const handler: ((tokens: Token[]) => Promise<any>) | undefined =
+      const handler:
+        ((tokens: Token[], level?: number) => Promise<any>) | undefined =
         handleTokens[tokenType];
       state.push(tokenType);
       if (handler) {
         push.type = tokenType;
-        push.content = await handler(accumulatedTokens);
+        push.content =
+          tokenType === "heading"
+            ? await handler(
+              accumulatedTokens,
+              parseInt(token.tag.split("")[1]!),
+            )
+            : await handler(accumulatedTokens);
         const unknownTagString: ProcessedToken = {
           type: "paragraph",
           content: accumulatedTokenContentString,

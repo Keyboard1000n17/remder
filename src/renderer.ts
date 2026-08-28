@@ -242,6 +242,11 @@ const args = parseArgs({
       default: false,
       short: "i",
     },
+    noRenderHeadings: {
+      type: "boolean",
+      default: false,
+      short: "e",
+    },
     width: {
       type: "string",
       default: process.stdout.columns?.toString() || "80",
@@ -486,6 +491,28 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         )
           throw new Error("What?");
         const tokenContent: HeadingObject = token.content;
+        if (args.values.noRenderHeadings) {
+          const tokenContent: HeadingObject = token.content as HeadingObject;
+          const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
+          const colorMap: Record<number, (str: string) => string> = {
+            1: (str: string) => chalk.bold.hex("#ffa50a")(str),
+            2: (str: string) => chalk.bold.yellow(str),
+            3: (str: string) => chalk.bold.cyan(str),
+            4: (str: string) => chalk.bold.hex("#ffa5a5")(str),
+            5: (str: string) => chalk.bold.green(str),
+            6: (str: string) => chalk.bold.hex("#aaa")(str),
+          };
+          str = colorMap[tokenContent.level]!(
+            "#".repeat(tokenContent.level) + " " + tokenContent.text,
+          );
+          componentArray.push(ansiToTextToken(str));
+          componentArray.push(
+            Text({
+              content: new StyledText(linksArray),
+            }),
+          );
+          break;
+        }
         const rows = tokenContent.headingTextArray;
         let start = 0;
         str += "\n";
@@ -507,21 +534,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           start = end;
         }
         componentArray.push(Text({ content: str }));
-        const ansiLinks = parseAnsiSequences(token.content.links);
-        const linksArray: TextChunk[] = [];
-        ansiLinks.forEach((ansiLink) =>
-          linksArray.push({
-            __isChunk: true,
-            text: ansiLink.value,
-            attributes: createTextAttributes({
-              bold: ansiLink.decorations.has("bold"),
-              italic: ansiLink.decorations.has("italic"),
-              underline: ansiLink.decorations.has("underline"),
-              dim: ansiLink.decorations.has("dim"),
-              strikethrough: ansiLink.decorations.has("strikethrough"),
-            }),
-          }),
-        );
+        const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
         componentArray.push(
           Text({
             content: new StyledText(linksArray),

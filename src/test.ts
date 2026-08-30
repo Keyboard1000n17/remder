@@ -1,26 +1,43 @@
-import {
-  TextTableRenderable,
-  bold,
-  createCliRenderer,
-  fg,
-  type TextChunk,
-  type TextTableContent,
-} from "@opentui/core";
+import figlet, { type FigletOptions } from "figlet";
+import { parseArgs } from "node:util";
 
-const cell = (text: string): TextChunk[] => [{ __isChunk: true, text }];
-const renderer = await createCliRenderer({ exitOnCtrlC: true });
-
-const content: TextTableContent = [
-  [[bold("Service")], [bold("Status")], [bold("Notes")]],
-  [cell("api"), [fg("#00d4aa")("OK")], cell("latency 28ms")],
-  [cell("worker"), [fg("#b8a0ff")("DEGRADED")], cell("queue depth: 124")],
-];
-
-const table = new TextTableRenderable(renderer, {
-  width: "100%",
-  wrapMode: "word",
-  borderStyle: "rounded",
-  content,
+const args = parseArgs({
+  options: {
+    name: {
+      type: "string",
+      short: "n",
+    },
+  },
 });
 
-renderer.root.add(table);
+const opts: FigletOptions = {
+  font: args.values.name || "Standard",
+  width: 60,
+  horizontalLayout: "full",
+  verticalLayout: "full",
+};
+
+console.log(
+  await figlet.text("ABCDEFGHIJKLMNOPQRSTUVWXYZ", opts as FigletOptions),
+  "\n",
+);
+console.log(
+  await figlet.text("abcdefghijklmnopqrstuvwxyz", opts as FigletOptions),
+  "\n",
+);
+console.log(await figlet.text("1234567890", opts as FigletOptions), "\n");
+console.log(await figlet.text("lorem ipsum", opts as FigletOptions), "\n");
+console.log(
+  await figlet.text(
+    "The quick fox jumps over the lazy dog.",
+    opts as FigletOptions,
+  ),
+  "\n",
+);
+
+// 3 rows -> h6 -> calvin s (modify it)
+// 4 rows -> h5 -> miniwi (modify it)
+// 5 rows -> h4 -> line blocks (modify it)
+// 6 rows -> h3 -> ansi compact
+// 7 rows -> h2 -> coder mini8
+// 8 rows -> h1 -> ansi regular

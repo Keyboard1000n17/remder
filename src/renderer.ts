@@ -193,6 +193,13 @@ const ansiToTextToken = (text: string) => {
   });
 };
 
+async function makeFigletFont(text: string, font: string) {
+  return (await import("figlet")).default.textSync(text, {
+    font: font,
+    width: parseInt(args.values.width),
+  });
+}
+
 function makeTaskList(item: ProcessedToken) {
   if (item.type !== "list_item") throw new Error("");
   console.log(`Called makeTaskList(), passed arg:\n${item}`);

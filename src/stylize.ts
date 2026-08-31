@@ -6,8 +6,6 @@ import { Resvg } from "@resvg/resvg-js";
 import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
 
-const glyphs = await Bun.file(`${import.meta.dir}/chars.json`).json();
-
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
 type TerminalImageOpts = {
@@ -30,21 +28,20 @@ type Handlers = {
 };
 
 export type HeadingObject = {
-  headingTextArray: string[][];
-  links: string;
   text: string;
+  links: string;
   level: number;
 };
 
 export interface ProcessedToken {
   type: string;
   content:
-  | string
-  | Image
-  | (ProcessedToken | Image)[]
-  | { code: string; language: string }
-  | TableToken[][]
-  | HeadingObject;
+    | string
+    | Image
+    | (ProcessedToken | Image)[]
+    | { code: string; language: string }
+    | TableToken[][]
+    | HeadingObject;
   properties: {
     [type: string]: any;
   };
@@ -295,15 +292,7 @@ function heading(token: Token, level = 1) {
     }
     index++;
   }
-  const convertText = text.toUpperCase().split("");
-  let grid: string[][] = [[], [], [], [], [], [], []];
-  convertText.forEach((character) => {
-    grid.forEach((row, index) => {
-      row.push(glyphs.h1[character][index]);
-    });
-  });
   const obj: HeadingObject = {
-    headingTextArray: grid,
     links: "",
     text: text,
     level: level,
@@ -344,7 +333,6 @@ export async function codeBlock(token: Token) {
       code: stylizedCodeArr.join("\n"),
       language: shikiTokens.grammarState?.lang ?? "plain",
     };
-    console.log("STYLIZE.TS:", stylizedCodeArr.join("\n"));
     return code;
   } else {
     return {
@@ -598,9 +586,9 @@ export default async function stylize(input: Token[]) {
         push.content =
           tokenType === "heading"
             ? await handler(
-              accumulatedTokens,
-              parseInt(token.tag.split("")[1]!),
-            )
+                accumulatedTokens,
+                parseInt(token.tag.split("")[1]!),
+              )
             : await handler(accumulatedTokens);
         const unknownTagString: ProcessedToken = {
           type: "paragraph",
@@ -632,10 +620,10 @@ export default async function stylize(input: Token[]) {
         Chalk.red.bold(
           "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
         ) +
-        "\n" +
-        Chalk.dim(
-          `PS: the token type was ${token.type}. Its index is ${index} `,
-        ),
+          "\n" +
+          Chalk.dim(
+            `PS: the token type was ${token.type}. Its index is ${index} `,
+          ),
       );
     }
 

@@ -36,8 +36,8 @@ console.log(
 );
 
 // 3 rows -> h6 -> calvin s (modify it)
-// 4 rows -> h5 -> miniwi (modify it)
-// 5 rows -> h4 -> line blocks (modify it)
+// 4 rows -> h5 -> miniwi
+// 5 rows -> h4 -> small
 // 6 rows -> h3 -> ansi compact
 // 7 rows -> h2 -> coder mini8
 // 8 rows -> h1 -> ansi regular

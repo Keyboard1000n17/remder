@@ -19,6 +19,7 @@ import {
   KeyEvent,
   type BoxOptions,
   BoxRenderable,
+  type TextOptions,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -891,26 +892,57 @@ const bottomBar = Box(bottomBarOpts, bottomBarChildren);
 renderer.root.add(bottomBar);
 //#endregion
 
+//#region help menu
+const helpMenuChildrenOpts: TextOptions = {
+  width: "auto",
+  height: 1,
+};
+const helpMenuChildren = [
+  Text({ content: "q - quit", ...helpMenuChildrenOpts }),
+];
+if (args.values.debug) {
+  helpMenuChildren.push(
+    Text({ content: "C - toggle console", ...helpMenuChildrenOpts }),
+  );
+}
+const helpMenuOpts: BoxOptions<BoxRenderable> = {
+  flexDirection: "row",
+  position: "absolute",
+  bottom: 2,
+  right: 2,
+  gap: 1,
+  padding: 1,
+  border: true,
+  title: "Help",
+  titleAlignment: "center",
+  titleColor: "white",
+  backgroundColor: RGBA.fromInts(40, 40, 40),
+  borderColor: RGBA.fromInts(40, 40, 40),
+  id: "helpMenu",
+  visible: false,
+  zIndex: 5,
+};
+const helpMenuBox = Box(helpMenuOpts, ...helpMenuChildren);
+renderer.root.add(helpMenuBox);
+//#endregion
+
 //#region keybinds
-const keyEventsArray = [];
-const onPressQ = (key: KeyEvent) => {
+const keyHandler = (key: KeyEvent) => {
   if (key.name === "q") {
     renderer.destroy();
+  } else if (key.name === "?") {
+    const helpMenuBox = renderer.root.findDescendantById("helpMenu");
+    if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
+  } else if (
+    args.values.debug &&
+    key.name === "c" &&
+    (key.capsLock ? !key.shift : key.shift)
+  ) {
+    renderer.console.toggle();
   }
 };
-keyEventsArray.push(onPressQ);
-if (args.values.debug) {
-  const toggleConsoleOnC = (key: KeyEvent) => {
-    if (key.name === "c" && (key.capsLock ? !key.shift : key.shift)) {
-      renderer.console.toggle();
-    }
-  };
-  keyEventsArray.push(toggleConsoleOnC);
-}
-keyEventsArray.forEach((keyEvent) =>
-  renderer.keyInput.on("keypress", keyEvent),
-);
-renderer.once("destroy", () => {
-  renderer.keyInput.off("keypress", onPressQ);
-});
+(renderer.keyInput.on("keypress", keyHandler),
+  renderer.once("destroy", () => {
+    renderer.keyInput.off("keypress", keyHandler);
+  }));
 //#endregion

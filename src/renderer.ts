@@ -842,18 +842,6 @@ if (args.positionals.length > 0) {
   renderer.root.add(menu);
 }
 
-//#region keybinds help
-const keymapHelp = Box(
-  {
-    gap: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    width: renderer.width > 60 ? 20 : "100%",
-  },
-  Text({ content: "q - quit" }),
-);
-//#endregion
-
 //#region bottom bar + opts
 const bottomBarOpts: BoxOptions<BoxRenderable> = {
   width: "100%",
@@ -879,15 +867,21 @@ const bottomBarChildren: ProxiedVNode<any>[] = [
     }),
   ),
 ];
-if (args.positionals.at(-1)) {
-  bottomBarChildren.push(
-    Text({
-      content: args.positionals.at(-1),
-      attributes: createTextAttributes({ dim: true }),
-      marginLeft: 1,
-    }),
-  );
-}
+bottomBarChildren.push(
+  Text({
+    content: args.positionals.at(-1) || "stdin",
+    attributes: createTextAttributes({ dim: true }),
+    marginLeft: 1,
+  }),
+);
+bottomBarChildren.push(
+  Text({
+    content: "? - Help",
+    alignSelf: "flex-end",
+    marginLeft: "auto",
+    marginRight: 1,
+  }),
+);
 const bottomBar = Box(bottomBarOpts, bottomBarChildren);
 renderer.root.add(bottomBar);
 //#endregion

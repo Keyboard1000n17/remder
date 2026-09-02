@@ -16,6 +16,9 @@ import {
   RGBA,
   createTextAttributes,
   StyledText,
+  KeyEvent,
+  type BoxOptions,
+  BoxRenderable,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -25,6 +28,7 @@ import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
 import type { FontName } from "figlet";
 
+//#region icon map
 const languageToNerdFontIconMap: Record<string, string> = {
   "angular-html": "\ued4b",
   "angular-ts": "\ued4b",
@@ -149,7 +153,11 @@ const languageToNerdFontIconMap: Record<string, string> = {
   yaml: "\ue8eb",
   zig: "\ue8ef",
 };
+//#endregion
 
+const colorPalette = createColorPalette();
+
+//#region utility functions: `rgbToRGBA`, `ansiToTextChunks`, `ansiToTextToken`
 const rgbToRGBA = ([r, g, b]: [number, number, number]): [
   number,
   number,
@@ -193,6 +201,7 @@ const ansiToTextToken = (text: string) => {
     content: new StyledText(ansiToTextChunks(text)),
   });
 };
+//#endregion
 
 async function makeFigletFont(text: string, level: number) {
   const figlet = (await import("figlet")).default;
@@ -254,8 +263,6 @@ function makeTaskList(item: ProcessedToken) {
   return { ...item, content };
 }
 
-const colorPalette = createColorPalette();
-
 const args = parseArgs({
   options: {
     noRenderImages: {
@@ -266,7 +273,7 @@ const args = parseArgs({
     noRenderHeadings: {
       type: "boolean",
       default: false,
-      short: "e",
+      short: "H",
     },
     width: {
       type: "string",
@@ -340,6 +347,7 @@ async function renderTable(tableToken: ProcessedToken) {
 }
 
 // NOTE: chatgpt made a prototype of this
+// TODO: finish this soon
 async function tokensToString(
   tokens: (ProcessedToken | Image)[],
   isRecursing?: boolean,
@@ -725,6 +733,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
   return componentArray;
 }
 
+//#region file menu
 const fileNames = (await readdir(".", { recursive: true, withFileTypes: true }))
   .filter((file) => file.isFile() && file.name.endsWith(".md"))
   .map((file) =>
@@ -747,7 +756,9 @@ const menu = Select({
   width: "100%",
   height: "100%",
 });
+//#endregion
 
+//#region handle stdin on windows
 if (process.platform === "win32") {
   args.values.printToStdout = true;
 }
@@ -768,6 +779,7 @@ const terminalInput = process.stdin.isTTY
 
 terminalInput.setRawMode?.(true);
 terminalInput.resume();
+//#endregion
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
@@ -777,6 +789,7 @@ const renderer = await createCliRenderer({
 });
 
 if (args.positionals.length > 0) {
+  //#region handle supplied file
   const filePath = args.positionals.at(-1);
   let fileContent = "";
   if (URL.canParse(filePath!)) {
@@ -789,7 +802,6 @@ if (args.positionals.length > 0) {
     }
   }
   const tokens = await stylize(parseInput(fileContent));
-
   if (args.values.printToStdout) {
     renderer.destroy();
     const content = await tokensToString(tokens);
@@ -807,7 +819,9 @@ if (args.positionals.length > 0) {
     box.focus();
     renderer.root.add(box);
   }
+  //#endregion
 } else if (!process.stdin.isTTY) {
+  //#region handle piped input on non-windows systems
   const md = await Bun.stdin.text();
   const tokens = await stylize(parseInput(md));
   const renderables = await renderMarkdown(tokens as ProcessedToken[]);
@@ -821,21 +835,36 @@ if (args.positionals.length > 0) {
   );
   box.focus();
   renderer.root.add(box);
+  //#endregion
 } else {
   menu.focus();
   renderer.root.add(menu);
 }
-if (args.values.debug) renderer.console.toggle();
-const bottomBar = Box(
+
+//#region keybinds help
+const keymapHelp = Box(
   {
-    width: "100%",
-    height: 1,
+    gap: 1,
     flexDirection: "row",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    backgroundColor: RGBA.fromInts(40, 40, 40),
+    flexWrap: "wrap",
+    width: renderer.width > 60 ? 20 : "100%",
   },
+  Text({ content: "q - quit" }),
+);
+//#endregion
+
+//#region bottom bar + opts
+const bottomBarOpts: BoxOptions<BoxRenderable> = {
+  width: "100%",
+  height: 1,
+  flexDirection: "row",
+  position: "absolute",
+  bottom: 0,
+  left: 0,
+  backgroundColor: RGBA.fromInts(40, 40, 40),
+  id: "bottomBar",
+};
+const bottomBarChildren: ProxiedVNode<any>[] = [
   Box(
     {
       paddingLeft: 1,
@@ -848,13 +877,40 @@ const bottomBar = Box(
       attributes: createTextAttributes({ bold: true, italic: true }),
     }),
   ),
-);
-if (args.positionals.at(-1))
-  bottomBar.add(
+];
+if (args.positionals.at(-1)) {
+  bottomBarChildren.push(
     Text({
       content: args.positionals.at(-1),
       attributes: createTextAttributes({ dim: true }),
       marginLeft: 1,
     }),
   );
+}
+const bottomBar = Box(bottomBarOpts, bottomBarChildren);
 renderer.root.add(bottomBar);
+//#endregion
+
+//#region keybinds
+const keyEventsArray = [];
+const onPressQ = (key: KeyEvent) => {
+  if (key.name === "q") {
+    renderer.destroy();
+  }
+};
+keyEventsArray.push(onPressQ);
+if (args.values.debug) {
+  const toggleConsoleOnC = (key: KeyEvent) => {
+    if (key.name === "c" && (key.capsLock ? !key.shift : key.shift)) {
+      renderer.console.toggle();
+    }
+  };
+  keyEventsArray.push(toggleConsoleOnC);
+}
+keyEventsArray.forEach((keyEvent) =>
+  renderer.keyInput.on("keypress", keyEvent),
+);
+renderer.once("destroy", () => {
+  renderer.keyInput.off("keypress", onPressQ);
+});
+//#endregion

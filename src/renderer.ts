@@ -1,3 +1,4 @@
+//#region imports
 import parseInput from "./parse-input.ts";
 import stylize, {
   Image,
@@ -29,6 +30,7 @@ import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
 import type { FontName } from "figlet";
+//#endregion
 
 //#region icon map
 const languageToNerdFontIconMap: Record<string, string> = {
@@ -160,7 +162,7 @@ const languageToNerdFontIconMap: Record<string, string> = {
 const colorPalette = createColorPalette();
 const headingsArrayForToc: { text: string; level: number; id: string }[] = []; // holds an array of all the headings in the document
 let headingIndexForToc = 0;
-const globalUtilityIdSet: Set<string> = new Set([]);
+const headingIndexes = [0, 0, 0, 0, 0, 0];
 
 //#region utility functions: `rgbToRGBA`, `randomIdGenerator` `ansiToTextChunks`, `ansiToTextToken`
 const rgbToRGBA = ([r, g, b]: [number, number, number]): [
@@ -168,15 +170,6 @@ const rgbToRGBA = ([r, g, b]: [number, number, number]): [
   number,
   number,
 ] => [r / 255, g / 255, b / 255];
-
-const randomIdGenerator = () => {
-  let tokenId = (Math.random() * 100).toPrecision().toString();
-  while (globalUtilityIdSet.has(tokenId)) {
-    tokenId = (Math.random() * 100).toPrecision(0).toString();
-  }
-  globalUtilityIdSet.add(tokenId);
-  return tokenId;
-};
 
 const ansiToTextChunks = (text: string) => {
   const ansiTokens = parseAnsiSequences(text);
@@ -215,10 +208,13 @@ const ansiToTextToken = (text: string, id?: string) => {
     return Text({
       content: new StyledText(ansiToTextChunks(text)),
       id: id,
+      wrapMode: "word",
+      width: "100%",
     });
   }
   const textToken = Text({
     content: new StyledText(ansiToTextChunks(text)),
+    wrapMode: "word",
   });
   return textToken;
 };
@@ -238,10 +234,12 @@ async function makeFigletFont(text: string, level: number) {
     5: "miniwi",
     6: "Calvin S Modified",
   };
-  return figlet.textSync(text, {
-    font: fontsList[level],
-    width: parseInt(args.values.width),
-  });
+  return text.split("").map((char) =>
+    figlet.textSync(char, {
+      font: fontsList[level],
+      width: parseInt(args.values.width),
+    }),
+  );
 }
 
 function makeTaskList(item: ProcessedToken) {
@@ -514,6 +512,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         let str = "";
         if (typeof token.content === "string") throw new Error("What?");
         const tokenContent: HeadingObject = token.content as HeadingObject;
+
         if (args.values.noRenderHeadings) {
           const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
           const colorMap: Record<number, (str: string) => string> = {
@@ -527,7 +526,12 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
           );
-          const headingId = randomIdGenerator();
+          const level = tokenContent.level;
+          headingIndexes[level - 1]!++;
+          for (let i = level; i < headingIndexes.length; i++) {
+            headingIndexes[i] = 0;
+          }
+          const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
           const heading = ansiToTextToken(str, headingId);
           componentArray.push(heading);
           componentArray.push(
@@ -542,11 +546,24 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           });
           break;
         }
-        const headingId = randomIdGenerator();
-        const heading = Text({
-          content: await makeFigletFont(tokenContent.text, tokenContent.level),
-          id: headingId,
-        });
+
+        const level = tokenContent.level;
+        headingIndexes[level - 1]!++;
+        for (let i = level; i < headingIndexes.length; i++) {
+          headingIndexes[i] = 0;
+        }
+        const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
+        const headingChildren = (
+          await makeFigletFont(tokenContent.text, tokenContent.level)
+        ).map((char) => Text({ content: char, flexShrink: 0 }));
+        const heading = Box(
+          {
+            id: headingId,
+            flexDirection: "row",
+            flexWrap: "wrap",
+          },
+          ...headingChildren,
+        );
         componentArray.push(heading);
         const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
         componentArray.push(
@@ -820,6 +837,14 @@ const renderer = await createCliRenderer({
   },
 });
 
+const root = new BoxRenderable(renderer, {
+  width: "100%",
+  height: "100%",
+  flexDirection: "row",
+  live: true,
+});
+renderer.root.add(root);
+
 if (args.positionals.length > 0) {
   //#region handle supplied file
   const filePath = args.positionals.at(-1);
@@ -846,14 +871,19 @@ if (args.positionals.length > 0) {
     renderables.forEach((renderable) => (renderable.marginBottom = 1));
     const box = ScrollBox(
       {
-        width: parseInt(args.values.width),
+        width: "auto",
+        minWidth: 0,
         height: renderer.height - 1,
         id: "root-scrollbox",
+        flexShrink: 1,
+        flexGrow: 1,
+        alignSelf: "flex-start",
+        paddingRight: 3,
       },
       renderables,
     );
     box.focus();
-    renderer.root.add(box);
+    root.add(box);
   }
   //#endregion
 } else if (!process.stdin.isTTY) {
@@ -864,18 +894,23 @@ if (args.positionals.length > 0) {
   renderables.forEach((renderable) => (renderable.marginBottom = 1));
   const box = ScrollBox(
     {
-      width: parseInt(args.values.width),
+      width: "auto",
+      minWidth: 0,
+      alignSelf: "flex-start",
       height: renderer.height - 1,
       id: "root-scrollbox",
+      flexShrink: 1,
+      flexGrow: 1,
+      paddingRight: 3,
     },
     renderables,
   );
   box.focus();
-  renderer.root.add(box);
+  root.add(box);
   //#endregion
 } else {
   menu.focus();
-  renderer.root.add(menu);
+  root.add(menu);
 }
 
 //#region bottom bar + opts
@@ -919,7 +954,7 @@ bottomBarChildren.push(
   }),
 );
 const bottomBar = Box(bottomBarOpts, bottomBarChildren);
-renderer.root.add(bottomBar);
+root.add(bottomBar);
 //#endregion
 
 //#region help menu
@@ -953,48 +988,85 @@ const helpMenuOpts: BoxOptions<BoxRenderable> = {
   zIndex: 5,
 };
 const helpMenuBox = Box(helpMenuOpts, ...helpMenuChildren);
-renderer.root.add(helpMenuBox);
+root.add(helpMenuBox);
 //#endregion
 
 //#region table of contents
-headingsArrayForToc.map((heading) =>
-  Text({
-    content: `${" ".repeat(heading.level - 1)}${"#".repeat(heading.level)} ${heading.text}`,
-  }),
+const tocScrollBoxChildren = headingsArrayForToc.map((heading) => {
+  const headingNumber = heading.id.split("-").at(-1)?.padStart(2, "0");
+  return Text({
+    content: `${"  ".repeat(heading.level - 1)}${headingNumber} ${heading.text}`,
+    id: `toc-${heading.id}`,
+  });
+});
+const tocScrollBox = ScrollBox(
+  {
+    visible: false,
+    zIndex: 4,
+    padding: 1,
+    minWidth: 20,
+    maxWidth: 50,
+    height: "100%",
+    id: "toc-scrollbox",
+    flexDirection: "column",
+  },
+  tocScrollBoxChildren,
 );
+root.add(tocScrollBox);
 //#endregion
 
 //#region keybinds
 const keyHandler = (key: KeyEvent) => {
+  //#region quit
   if (key.name === "q") {
     renderer.destroy();
-  } else if (key.name === "?") {
-    const helpMenuBox = renderer.root.findDescendantById("helpMenu");
+    return;
+  }
+  //#endregion
+  //#region help
+  if (key.name === "?") {
+    const helpMenuBox = root.findDescendantById("helpMenu");
     if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
-  } else if (
+  }
+  //#endregion
+  //#region console
+  if (
     args.values.debug &&
     key.name === "c" &&
     (key.capsLock ? !key.shift : key.shift)
   ) {
     renderer.console.toggle();
-  } else if (
+  }
+  //#endregion
+  //#region scroll headings
+  if (
     key.name === "j" &&
     headingsArrayForToc.length > 0 &&
     (key.capsLock ? !key.shift : key.shift)
   ) {
-    const scrollBox = renderer.root.findDescendantById(
+    const scrollBox = root.findDescendantById(
       "root-scrollbox",
     ) as ScrollBoxRenderable;
     const id = headingsArrayForToc[headingIndexForToc]?.id;
     if (!id) return;
-    const heading = renderer.root.findDescendantById(id);
+    const heading = root.findDescendantById(id);
     const y = heading?.y;
     if (y === undefined) return;
     if (!heading) return;
     process.nextTick(() => scrollBox.scrollTo(heading.y + scrollBox.scrollTop));
     headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
+    console.log(heading.id);
   }
+  //#endregion
+  //#region table of contents
+  if (key.name === "t" && (key.capsLock ? !key.shift : key.shift)) {
+    const tocScrollBox = root.findDescendantById("toc-scrollbox");
+    if (tocScrollBox) tocScrollBox.visible = !tocScrollBox.visible;
+    console.log("triggered");
+  }
+  //#endregion
 };
+
 renderer.keyInput.on("keypress", keyHandler);
 renderer.once("destroy", () => {
   renderer.keyInput.off("keypress", keyHandler);

@@ -22,6 +22,7 @@ import {
   BoxRenderable,
   type TextOptions,
   ScrollBoxRenderable,
+  SelectRenderable,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -992,27 +993,43 @@ root.add(helpMenuBox);
 //#endregion
 
 //#region table of contents
-const tocScrollBoxChildren = headingsArrayForToc.map((heading) => {
+const tocMenuChildren = headingsArrayForToc.map((heading) => {
   const headingNumber = heading.id.split("-").at(-1)?.padStart(2, "0");
-  return Text({
-    content: `${"  ".repeat(heading.level - 1)}${headingNumber} ${heading.text}`,
-    id: `toc-${heading.id}`,
-  });
+  return {
+    name: `${"  ".repeat(heading.level - 1)}${headingNumber} ${heading.text}`,
+    description: "",
+  };
 });
-const tocScrollBox = ScrollBox(
-  {
-    visible: false,
-    zIndex: 4,
-    padding: 1,
-    minWidth: 20,
-    maxWidth: 50,
-    height: "100%",
-    id: "toc-scrollbox",
-    flexDirection: "column",
-  },
-  tocScrollBoxChildren,
-);
-root.add(tocScrollBox);
+const tocMenu = new SelectRenderable(renderer, {
+  padding: 1,
+  width: 40,
+  id: "toc-scrollbox",
+  focusedBackgroundColor: RGBA.fromInts(8, 153, 22, 0.2),
+  textColor: RGBA.fromInts(208, 208, 208),
+  focusedTextColor: RGBA.fromInts(208, 208, 208),
+  selectedTextColor: "white",
+  showSelectionIndicator: false,
+  options: tocMenuChildren,
+  showDescription: false,
+  height: "100%",
+  marginTop: 1,
+});
+const tocBox = new BoxRenderable(renderer, {
+  visible: false,
+  zIndex: 4,
+  flexDirection: "column",
+  height: "100%",
+  width: 40,
+  flexShrink: 0,
+  title: "Table of Contents",
+  border: true,
+  borderColor: "transparent",
+  titleColor: "white",
+  titleAlignment: "center",
+  marginTop: 1,
+});
+tocBox.add(tocMenu);
+root.add(tocBox);
 //#endregion
 
 //#region keybinds
@@ -1027,6 +1044,7 @@ const keyHandler = (key: KeyEvent) => {
   if (key.name === "?") {
     const helpMenuBox = root.findDescendantById("helpMenu");
     if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
+    return;
   }
   //#endregion
   //#region console
@@ -1036,6 +1054,7 @@ const keyHandler = (key: KeyEvent) => {
     (key.capsLock ? !key.shift : key.shift)
   ) {
     renderer.console.toggle();
+    return;
   }
   //#endregion
   //#region scroll headings
@@ -1054,16 +1073,36 @@ const keyHandler = (key: KeyEvent) => {
     if (y === undefined) return;
     if (!heading) return;
     process.nextTick(() => scrollBox.scrollTo(heading.y + scrollBox.scrollTop));
+    console.log(headingIndexForToc);
     headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
-    console.log(heading.id);
+    headingIndexForToc > 0 ? tocMenu.moveDown() : tocMenu.setSelectedIndex(0);
+    return;
   }
   //#endregion
   //#region table of contents
   if (key.name === "t" && (key.capsLock ? !key.shift : key.shift)) {
-    const tocScrollBox = root.findDescendantById("toc-scrollbox");
-    if (tocScrollBox) tocScrollBox.visible = !tocScrollBox.visible;
+    tocBox.visible = !tocBox.visible;
+    process.nextTick(() => {
+      if (tocBox.visible) {
+        tocMenu.focus();
+      } else {
+        root.findDescendantById("root-scrollbox")!.focus();
+      }
+    });
     console.log("triggered");
+    return;
   }
+  //#region focus toc
+  if (key.name === "t" && (key.capsLock ? key.shift : !key.shift)) {
+    if (tocBox.visible) {
+      tocMenu.focused
+        ? root.findDescendantById("root-scrollbox")!.focus()
+        : tocMenu.focus();
+    }
+    console.log(tocMenu.focused);
+    return;
+  }
+  //#endregion
   //#endregion
 };
 

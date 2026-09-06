@@ -1085,69 +1085,11 @@ const keyHandler = (key: KeyEvent) => {
   //#region on press T - table of contents
   if (key.name === "t" && (key.capsLock ? !key.shift : key.shift)) {
     tocBox.visible = !tocBox.visible;
-    process.nextTick(() => {
-      if (tocBox.visible) {
-        tocMenu.focus();
-      } else {
-        root.findDescendantById("root-scrollbox")!.focus();
-      }
-    });
     console.log("triggered");
     return;
   }
   //#endregion
-  //#region on press t - focus toc
-  if (key.name === "t" && (key.capsLock ? key.shift : !key.shift)) {
-    if (tocBox.visible) {
-      tocMenu.focused
-        ? root.findDescendantById("root-scrollbox")!.focus()
-        : tocMenu.focus();
-    }
-    console.log("focused tocMenu?:", tocMenu.focused);
-    return;
-  }
-  //#endregion
-  //#region on press tab - focus next element
-  // NOTE: chatgpt generated this too
-  if (key.name === "tab") {
-    const focusable = [
-      root.findDescendantById("root-scrollbox")!,
-      tocMenu,
-    ].filter((child) => child.visible);
-    if (focusable.length === 0) return;
-    const current = focusable.findIndex((child) => child.focused);
-    const direction = key.shift ? -1 : 1;
-    const next = (current + direction + focusable.length) % focusable.length;
-    focusable[next]?.focus();
-    return;
-  }
-  //#endregion
 };
-//#endregion
-
-//#region handle menu
-tocMenu.on(
-  SelectRenderableEvents.SELECTION_CHANGED,
-  (_: number, option: SelectOption) => {
-    const scrollBox = root.findDescendantById(
-      "root-scrollbox",
-    ) as ScrollBoxRenderable;
-    const id = option.value;
-    if (!id) return;
-    const heading = root.findDescendantById(id);
-    const y = heading?.y;
-    if (y === undefined || !heading) return;
-    process.nextTick(() => scrollBox.scrollTo(heading.y + scrollBox.scrollTop));
-    console.log(headingIndexForToc);
-    headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
-  },
-);
-//#endregion
-
-//#region handle tab/shift-tab
-root.on("keypress", (key) => {
-  console.log("tab");
-});
 //#endregion
 
 renderer.keyInput.on("keypress", keyHandler);

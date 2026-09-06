@@ -1040,14 +1040,14 @@ const keyHandler = (key: KeyEvent) => {
     return;
   }
   //#endregion
-  //#region help
+  //#region on press ? - help
   if (key.name === "?") {
     const helpMenuBox = root.findDescendantById("helpMenu");
     if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
     return;
   }
   //#endregion
-  //#region console
+  //#region on press C - console
   if (
     args.values.debug &&
     key.name === "c" &&
@@ -1057,7 +1057,7 @@ const keyHandler = (key: KeyEvent) => {
     return;
   }
   //#endregion
-  //#region scroll headings
+  //#region on press J - scroll headings
   if (
     key.name === "j" &&
     headingsArrayForToc.length > 0 &&
@@ -1073,9 +1073,9 @@ const keyHandler = (key: KeyEvent) => {
     if (y === undefined) return;
     if (!heading) return;
     process.nextTick(() => scrollBox.scrollTo(heading.y + scrollBox.scrollTop));
+    tocMenu.setSelectedIndex(headingIndexForToc);
     console.log(headingIndexForToc);
     headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
-    headingIndexForToc > 0 ? tocMenu.moveDown() : tocMenu.setSelectedIndex(0);
     return;
   }
   //#endregion
@@ -1092,6 +1092,7 @@ const keyHandler = (key: KeyEvent) => {
     console.log("triggered");
     return;
   }
+  //#endregion
   //#region focus toc
   if (key.name === "t" && (key.capsLock ? key.shift : !key.shift)) {
     if (tocBox.visible) {
@@ -1102,7 +1103,6 @@ const keyHandler = (key: KeyEvent) => {
     console.log(tocMenu.focused);
     return;
   }
-  //#endregion
   //#endregion
 };
 

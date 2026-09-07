@@ -792,6 +792,52 @@ export async function renderMarkdown(
         componentArray.push(box);
         break;
       //#endregion
+      //#region div
+      case "div":
+        const divBox = new BoxRenderable(ctx, {
+          flexDirection: "column",
+          width: "100%",
+        });
+        const divBoxRenderables = await renderMarkdown(
+          token.content as ProcessedToken[],
+          ctx,
+        );
+        divBoxRenderables.forEach((renderable) => divBox.add(renderable));
+        componentArray.push(divBox);
+        break;
+      //#endregion
+      //#region details
+      case "details":
+        const summaryBox = new BoxRenderable(ctx, {
+          width: "100%",
+          border: true,
+          flexDirection: "column",
+          rowGap: 1,
+          onMouseDown: () => {
+            const detailsElement =
+              summaryBox.findDescendantById("details-element");
+            if (detailsElement)
+              detailsElement.visible = !detailsElement.visible;
+          },
+        });
+        const detailsContent = token.content as ProcessedToken[];
+        const firstToken = detailsContent[0];
+        const summaryText = Text({
+          content: String(firstToken?.content),
+          attributes: createTextAttributes({ bold: true }),
+        });
+        const detailsBox = Box(
+          { id: "details-element", visible: false },
+          await renderMarkdown(
+            detailsContent[1]?.content as ProcessedToken[],
+            ctx,
+          ),
+        );
+        summaryBox.add(summaryText);
+        summaryBox.add(detailsBox);
+        componentArray.push(summaryBox);
+        break;
+      //#endregion
       //#region default
       default:
         console.log("DEFAULT CASE:", token);
@@ -1131,7 +1177,6 @@ const keyHandler = (key: KeyEvent) => {
       contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
     );
     tocMenu.setSelectedIndex(headingIndexForToc);
-    console.log(headingIndexForToc);
     headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
     return;
   }
@@ -1150,14 +1195,12 @@ const keyHandler = (key: KeyEvent) => {
       contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
     );
     tocMenu.setSelectedIndex(headingIndexForToc);
-    console.log("K", headingIndexForToc);
     return;
   }
   //#endregion
   //#region on press T - table of contents
   if (key.name === "t" && isCapital) {
     tocBox.visible = !tocBox.visible;
-    console.log("triggered");
     return;
   }
   //#endregion
@@ -1177,16 +1220,6 @@ renderer.on("frame", () => {
   if (scrollTop === lastScrollTop) return;
   syncToC();
   lastScrollTop = scrollTop;
-  console.log({
-    contentScrollBox: [contentScrollBox.y, contentScrollBox.height],
-    wrapper: [contentScrollBox.wrapper.y, contentScrollBox.wrapper.height],
-    viewport: [contentScrollBox.viewport.y, contentScrollBox.viewport.height],
-    content: [contentScrollBox.content.y, contentScrollBox.content.height],
-    scrollbar: [
-      contentScrollBox.verticalScrollBar.y,
-      contentScrollBox.verticalScrollBar.height,
-    ],
-  });
 });
 function syncToC() {
   if (headingsArrayForToc.length === 0) return;

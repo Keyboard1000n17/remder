@@ -243,12 +243,15 @@ async function makeFigletFont(text: string, level: number) {
     5: "miniwi",
     6: "Calvin S Modified",
   };
-  return text.split("").map((char) =>
-    figlet.textSync(char, {
-      font: fontsList[level],
-      width: parseInt(args.values.width),
-    }),
-  );
+  return text
+    .trim()
+    .split("")
+    .map((char) =>
+      figlet.textSync(char, {
+        font: fontsList[level],
+        width: parseInt(args.values.width),
+      }),
+    );
 }
 
 function makeTaskList(item: ProcessedToken) {
@@ -310,7 +313,7 @@ const args = parseArgs({
     height: {
       type: "string",
       default: process.stdout.rows?.toString() || "25",
-      short: "c",
+      short: "h",
     },
     printToStdout: {
       type: "boolean",
@@ -547,11 +550,13 @@ export async function renderMarkdown(
           const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
           const heading = ansiToTextToken(str, ctx, headingId);
           componentArray.push(heading);
-          componentArray.push(
-            new TextRenderable(ctx, {
-              content: new StyledText(linksArray),
-            }),
-          );
+          if (linksArray.length > 0) {
+            componentArray.push(
+              new TextRenderable(ctx, {
+                content: new StyledText(linksArray),
+              }),
+            );
+          }
           headingsArrayForToc.push({
             text: tokenContent.text,
             level: tokenContent.level,
@@ -577,11 +582,13 @@ export async function renderMarkdown(
         );
         componentArray.push(heading);
         const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
-        componentArray.push(
-          new TextRenderable(ctx, {
-            content: new StyledText(linksArray),
-          }),
-        );
+        if (linksArray.length > 0) {
+          componentArray.push(
+            new TextRenderable(ctx, {
+              content: new StyledText(linksArray),
+            }),
+          );
+        }
         headingsArrayForToc.push({
           text: tokenContent.text,
           level: tokenContent.level,
@@ -679,7 +686,28 @@ export async function renderMarkdown(
           ctx,
         );
         blockquoteRenderables.forEach((renderable) =>
-          blockquoteBox.add(renderable),
+          blockquoteBox.add(
+            Box(
+              {
+                paddingLeft: 1,
+                border: ["left"],
+                customBorderChars: {
+                  bottomLeft: uhb,
+                  bottomRight: uhb,
+                  topLeft: uhb,
+                  topRight: uhb,
+                  vertical: uhb,
+                  horizontal: uhb,
+                  topT: uhb,
+                  bottomT: uhb,
+                  leftT: uhb,
+                  rightT: uhb,
+                  cross: uhb,
+                },
+              },
+              renderable,
+            ),
+          ),
         );
         componentArray.push(blockquoteBox);
         break;
@@ -871,14 +899,17 @@ if (args.positionals.length > 0) {
       id: "root-scrollbox",
       flexShrink: 1,
       flexGrow: 1,
-      rowGap: 0,
       paddingRight: 3,
+      contentOptions: {
+        rowGap: 1,
+      },
     });
     const renderables = await renderMarkdown(
       tokens as ProcessedToken[],
       renderer,
     );
     renderables.forEach((renderable) => {
+      // box.add(Box({ border: true, margin: 0 }, renderable));
       box.add(renderable);
     });
     const originalHandleKeyPress = box.verticalScrollBar.handleKeyPress.bind(
@@ -915,8 +946,10 @@ if (args.positionals.length > 0) {
       id: "root-scrollbox",
       flexShrink: 1,
       flexGrow: 1,
-      rowGap: 0,
       paddingRight: 3,
+      contentOptions: {
+        rowGap: 1,
+      },
     },
     renderables,
   );

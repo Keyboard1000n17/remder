@@ -23,8 +23,9 @@ import {
   type TextOptions,
   ScrollBoxRenderable,
   SelectRenderable,
-  SelectRenderableEvents,
-  type SelectOption,
+  Renderable,
+  TextRenderable,
+  type RenderContext,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -163,7 +164,12 @@ const languageToNerdFontIconMap: Record<string, string> = {
 //#endregion
 
 const colorPalette = createColorPalette();
-const headingsArrayForToc: { text: string; level: number; id: string }[] = []; // holds an array of all the headings in the document
+const headingsArrayForToc: {
+  text: string;
+  level: number;
+  id: string;
+  renderable: Renderable;
+}[] = []; // holds an array of all the headings in the document
 let headingIndexForToc = 0;
 const headingIndexes = [0, 0, 0, 0, 0, 0];
 
@@ -206,16 +212,16 @@ const ansiToTextChunks = (text: string) => {
   return textChunks;
 };
 
-const ansiToTextToken = (text: string, id?: string) => {
+const ansiToTextToken = (text: string, ctx: RenderContext, id?: string) => {
   if (id) {
-    return Text({
+    return new TextRenderable(ctx, {
       content: new StyledText(ansiToTextChunks(text)),
       id: id,
       wrapMode: "word",
       width: "100%",
     });
   }
-  const textToken = Text({
+  const textToken = new TextRenderable(ctx, {
     content: new StyledText(ansiToTextChunks(text)),
     wrapMode: "word",
   });
@@ -446,8 +452,11 @@ async function tokensToString(
   ).join("\n");
 }
 
-export async function renderMarkdown(tokens: ProcessedToken[]) {
-  const componentArray: (ProxiedVNode<any> | TextTableRenderable)[] = [];
+export async function renderMarkdown(
+  tokens: ProcessedToken[],
+  ctx: RenderContext,
+) {
+  const componentArray: Renderable[] = [];
   //#region
   for (const token of tokens) {
     //#region switch token type
@@ -463,18 +472,18 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
                 .split("\n")
                 .map((line) => line.trim())
                 .join("\n"),
+              ctx,
             ),
           );
           break;
         }
       case "paragraph":
         const content = token.content;
-        const tempComponentArray = [];
         if (!Array.isArray(content))
           throw new Error(
             `Table token type is somehow ${typeof content} instead of an array!`,
           );
-
+        const paragraphBox = new BoxRenderable(ctx, { padding: 0 });
         for (const element of content) {
           if ("imageAlt" in element)
             continue; // this shouldn't be possible?
@@ -485,10 +494,10 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             "imageAlt" in element.content
           ) {
             const image = element.content;
-            tempComponentArray.push(
+            paragraphBox.add(
               args.values.noRenderImages
-                ? ansiToTextToken(chalk.gray(image.imageAlt))
-                : ansiToTextToken(await image.render()),
+                ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
+                : ansiToTextToken(await image.render(), ctx),
             );
           } else if (element.type === "text") {
             if (typeof element.content !== "string") throw new Error("What?");
@@ -498,8 +507,9 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
                 .map((line) => line.trim())
                 .filter((line) => line.length > 0)
                 .join("\n"),
+              ctx,
             );
-            tempComponentArray.push(parsedAnsi);
+            paragraphBox.add(parsedAnsi);
           } else {
             throw new Error(
               `Did not recognize type ${element.type}.
@@ -507,7 +517,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             );
           }
         }
-        componentArray.push(Box({ padding: 0 }, ...tempComponentArray));
+        componentArray.push(paragraphBox);
         break;
       //#endregion
       //#region heading
@@ -535,10 +545,10 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             headingIndexes[i] = 0;
           }
           const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
-          const heading = ansiToTextToken(str, headingId);
+          const heading = ansiToTextToken(str, ctx, headingId);
           componentArray.push(heading);
           componentArray.push(
-            Text({
+            new TextRenderable(ctx, {
               content: new StyledText(linksArray),
             }),
           );
@@ -546,6 +556,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             text: tokenContent.text,
             level: tokenContent.level,
             id: headingId,
+            renderable: heading,
           });
           break;
         }
@@ -556,21 +567,18 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           headingIndexes[i] = 0;
         }
         const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
-        const headingChildren = (
-          await makeFigletFont(tokenContent.text, tokenContent.level)
-        ).map((char) => Text({ content: char, flexShrink: 0 }));
-        const heading = Box(
-          {
-            id: headingId,
-            flexDirection: "row",
-            flexWrap: "wrap",
-          },
-          ...headingChildren,
+        const heading = new BoxRenderable(ctx, {
+          id: headingId,
+          flexDirection: "row",
+          flexWrap: "wrap",
+        });
+        (await makeFigletFont(tokenContent.text, tokenContent.level)).forEach(
+          (char) => heading.add(Text({ content: char, flexShrink: 0 })),
         );
         componentArray.push(heading);
         const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
         componentArray.push(
-          Text({
+          new TextRenderable(ctx, {
             content: new StyledText(linksArray),
           }),
         );
@@ -578,6 +586,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           text: tokenContent.text,
           level: tokenContent.level,
           id: headingId,
+          renderable: heading,
         });
         break;
       //#endregion
@@ -597,7 +606,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
       //#region bullet list
       case "bullet_list":
         const bp = "\u2022";
-        const bulletListItems = [];
+        const bulletListbox = new BoxRenderable(ctx, {});
         for (const listItem of token.content as ProcessedToken[]) {
           if (listItem.type !== "list_item")
             throw new Error(
@@ -611,9 +620,10 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(
             listContent.flat() as ProcessedToken[],
+            ctx,
           );
           for (const listRenderable of listRenderables) {
-            bulletListItems.push(
+            bulletListbox.add(
               Box(
                 {
                   flexDirection: "row",
@@ -625,13 +635,13 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             );
           }
         }
-        componentArray.push(Box({}, ...bulletListItems));
+        componentArray.push(bulletListbox);
         break;
       //#endregion
       //#region ordered list
       case "ordered_list":
         let number = token.properties.start || 1;
-        const orderedListItems = [];
+        const orderedListBox = new BoxRenderable(ctx, {});
         for (const listItem of token.content as ProcessedToken[]) {
           if (listItem.type !== "list_item")
             throw new Error(
@@ -641,9 +651,10 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(
             listContent.flat() as ProcessedToken[],
+            ctx,
           );
           for (const listRenderable of listRenderables) {
-            orderedListItems.push(
+            orderedListBox.add(
               Box(
                 {
                   flexDirection: "row",
@@ -656,38 +667,21 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
             number++;
           }
         }
-        componentArray.push(Box({}, ...orderedListItems));
+        componentArray.push(orderedListBox);
         break;
       //#endregion
       //#region blockquote
       case "blockquote":
         const uhb = "\u258c"; // unicode left half block
+        const blockquoteBox = new BoxRenderable(ctx, {});
         const blockquoteRenderables = await renderMarkdown(
           token.content as ProcessedToken[],
+          ctx,
         );
-        componentArray.push(
-          Box(
-            {
-              border: ["left"],
-              paddingLeft: 1,
-              customBorderChars: {
-                bottomLeft: uhb,
-                bottomRight: uhb,
-                topLeft: uhb,
-                topRight: uhb,
-                vertical: uhb,
-                horizontal: uhb,
-                topT: uhb,
-                bottomT: uhb,
-                leftT: uhb,
-                rightT: uhb,
-                cross: uhb,
-              },
-              borderColor: RGBA.fromHex("#888"),
-            },
-            ...blockquoteRenderables,
-          ),
+        blockquoteRenderables.forEach((renderable) =>
+          blockquoteBox.add(renderable),
         );
+        componentArray.push(blockquoteBox);
         break;
       //#endregion
       //#region alerts
@@ -699,40 +693,38 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
           Warning: { icon: "\uea6c", color: "#dd4" },
           Caution: { icon: "\u{f0ce6}", color: "#f44" },
         };
-        const alertContent = await renderMarkdown(
-          token.content as ProcessedToken[],
-        );
         const uhb = "\u258c"; // unicode left half block
         const alertType = token.properties.alertType;
         const alertIconAndColor = alertIcons[alertType];
-        componentArray.push(
-          Box(
-            {
-              border: ["left"],
-              paddingLeft: 1,
-              customBorderChars: {
-                bottomLeft: uhb,
-                bottomRight: uhb,
-                topLeft: uhb,
-                topRight: uhb,
-                vertical: uhb,
-                horizontal: uhb,
-                topT: uhb,
-                bottomT: uhb,
-                leftT: uhb,
-                rightT: uhb,
-                cross: uhb,
-              },
-              rowGap: 1,
-              borderColor: RGBA.fromHex(alertIconAndColor?.color || ""),
-            },
-            Text({
-              content: `${alertIconAndColor?.icon} ${alertType}`,
-              fg: RGBA.fromHex(alertIconAndColor?.color || ""),
-            }),
-            ...alertContent,
-          ),
+        const alertBox = new BoxRenderable(ctx, {
+          border: ["left"],
+          paddingLeft: 1,
+          customBorderChars: {
+            bottomLeft: uhb,
+            bottomRight: uhb,
+            topLeft: uhb,
+            topRight: uhb,
+            vertical: uhb,
+            horizontal: uhb,
+            topT: uhb,
+            bottomT: uhb,
+            leftT: uhb,
+            rightT: uhb,
+            cross: uhb,
+          },
+          rowGap: 1,
+          borderColor: RGBA.fromHex(alertIconAndColor?.color || ""),
+        });
+        alertBox.add(
+          Text({
+            content: `${alertIconAndColor?.icon} ${alertType}`,
+            fg: RGBA.fromHex(alertIconAndColor?.color || ""),
+          }),
         );
+        (await renderMarkdown(token.content as ProcessedToken[], ctx)).forEach(
+          (renderable) => alertBox.add(renderable),
+        );
+        componentArray.push(alertBox);
         break;
       }
       //#endregion
@@ -746,23 +738,25 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
         const icon =
           languageToNerdFontIconMap[language] ??
           languageToNerdFontIconMap.default;
-        const box = Box(
-          {
-            paddingLeft: 2,
-            paddingRight: 2,
-            paddingTop: 1,
-            marginLeft: 1,
-            rowGap: 1,
-            backgroundColor: "#181825",
-            width: "auto",
-            minWidth: 40,
-            flexShrink: 0,
-            flexGrow: 0,
-            alignSelf: "flex-start",
-          },
+        const box = new BoxRenderable(ctx, {
+          paddingLeft: 2,
+          paddingRight: 2,
+          paddingTop: 1,
+          marginLeft: 1,
+          rowGap: 1,
+          backgroundColor: "#181825",
+          width: "auto",
+          minWidth: 40,
+          flexShrink: 0,
+          flexGrow: 0,
+          alignSelf: "flex-start",
+        });
+        box.add(
           Text({
             content: `${icon} ${language}`,
           }),
+        );
+        box.add(
           Text({
             content: new StyledText(ansiToTextChunks(codeTokenContent.code)),
           }),
@@ -773,7 +767,7 @@ export async function renderMarkdown(tokens: ProcessedToken[]) {
       //#region default
       default:
         console.log("DEFAULT CASE:", token);
-        componentArray.push(ansiToTextToken(String(token.content)));
+        componentArray.push(ansiToTextToken(String(token.content), ctx));
       //#endregion
     }
     //#endregion
@@ -870,7 +864,6 @@ if (args.positionals.length > 0) {
     );
     process.exit(0);
   } else {
-    const renderables = await renderMarkdown(tokens as ProcessedToken[]);
     const box = new ScrollBoxRenderable(renderer, {
       width: "auto",
       minWidth: 0,
@@ -878,14 +871,30 @@ if (args.positionals.length > 0) {
       id: "root-scrollbox",
       flexShrink: 1,
       flexGrow: 1,
-      alignSelf: "flex-start",
+      rowGap: 0,
       paddingRight: 3,
-      // scrollbarOptions: { scrollStep: 1 },
     });
+    const renderables = await renderMarkdown(
+      tokens as ProcessedToken[],
+      renderer,
+    );
     renderables.forEach((renderable) => {
-      renderable.marginBottom = 1;
       box.add(renderable);
     });
+    const originalHandleKeyPress = box.verticalScrollBar.handleKeyPress.bind(
+      box.verticalScrollBar,
+    );
+    box.verticalScrollBar.handleKeyPress = (key) => {
+      if (key.name === "up" || key.name === "k") {
+        box.scrollBy(-1, "absolute");
+        return true;
+      }
+      if (key.name === "down" || key.name === "j") {
+        box.scrollBy(1, "absolute");
+        return true;
+      }
+      return originalHandleKeyPress(key);
+    };
     box.focus();
     root.add(box);
   }
@@ -894,22 +903,38 @@ if (args.positionals.length > 0) {
   //#region handle piped input on non-windows systems
   const md = await Bun.stdin.text();
   const tokens = await stylize(parseInput(md));
-  const renderables = await renderMarkdown(tokens as ProcessedToken[]);
-  renderables.forEach((renderable) => (renderable.marginBottom = 1));
+  const renderables = await renderMarkdown(
+    tokens as ProcessedToken[],
+    renderer,
+  );
   const box = ScrollBox(
     {
       width: "auto",
       minWidth: 0,
-      alignSelf: "flex-start",
       height: renderer.height - 1,
       id: "root-scrollbox",
       flexShrink: 1,
       flexGrow: 1,
+      rowGap: 0,
       paddingRight: 3,
     },
     renderables,
   );
   box.focus();
+  const originalHandleKeyPress = box.verticalScrollBar.handleKeyPress.bind(
+    box.verticalScrollBar,
+  );
+  box.verticalScrollBar.handleKeyPress = (key) => {
+    if (key.name === "up" || key.name === "k") {
+      box.scrollBy(-1, "absolute");
+      return true;
+    }
+    if (key.name === "down" || key.name === "j") {
+      box.scrollBy(1, "absolute");
+      return true;
+    }
+    return originalHandleKeyPress(key);
+  };
   root.add(box);
   //#endregion
 } else {
@@ -928,7 +953,8 @@ const bottomBarOpts: BoxOptions<BoxRenderable> = {
   backgroundColor: RGBA.fromInts(40, 40, 40),
   id: "bottomBar",
 };
-const bottomBarChildren: ProxiedVNode<any>[] = [
+const bottomBar = new BoxRenderable(renderer, bottomBarOpts);
+bottomBar.add(
   Box(
     {
       paddingLeft: 1,
@@ -941,15 +967,15 @@ const bottomBarChildren: ProxiedVNode<any>[] = [
       attributes: createTextAttributes({ bold: true, italic: true }),
     }),
   ),
-];
-bottomBarChildren.push(
+);
+bottomBar.add(
   Text({
     content: args.positionals.at(-1) || "stdin",
     attributes: createTextAttributes({ dim: true }),
     marginLeft: 1,
   }),
 );
-bottomBarChildren.push(
+bottomBar.add(
   Text({
     content: "? - Help",
     alignSelf: "flex-end",
@@ -957,7 +983,6 @@ bottomBarChildren.push(
     marginRight: 1,
   }),
 );
-const bottomBar = Box(bottomBarOpts, bottomBarChildren);
 root.add(bottomBar);
 //#endregion
 
@@ -1036,8 +1061,13 @@ tocBox.add(tocMenu);
 root.add(tocBox);
 //#endregion
 
+const contentScrollBox = root.findDescendantById(
+  "root-scrollbox",
+) as ScrollBoxRenderable;
+
 //#region keybinds
 const keyHandler = (key: KeyEvent) => {
+  const isCapital = key.capsLock ? !key.shift : key.shift;
   //#region quit
   if (key.name === "q") {
     renderer.destroy();
@@ -1052,38 +1082,47 @@ const keyHandler = (key: KeyEvent) => {
   }
   //#endregion
   //#region on press C - console
-  if (
-    args.values.debug &&
-    key.name === "c" &&
-    (key.capsLock ? !key.shift : key.shift)
-  ) {
+  if (args.values.debug && key.name === "c" && isCapital) {
     renderer.console.toggle();
     return;
   }
   //#endregion
-  //#region on press J - scroll headings
-  if (
-    key.name === "j" &&
-    headingsArrayForToc.length > 0 &&
-    (key.capsLock ? !key.shift : key.shift)
-  ) {
-    const scrollBox = root.findDescendantById(
-      "root-scrollbox",
-    ) as ScrollBoxRenderable;
+  //#region on press J - scroll headings down
+  if (key.name === "j" && headingsArrayForToc.length > 0 && isCapital) {
     const id = headingsArrayForToc[headingIndexForToc]?.id;
     if (!id) return;
     const heading = root.findDescendantById(id);
     const y = heading?.y;
     if (y === undefined || !heading) return;
-    process.nextTick(() => scrollBox.scrollTo(heading.y + scrollBox.scrollTop));
+    process.nextTick(() =>
+      contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
+    );
     tocMenu.setSelectedIndex(headingIndexForToc);
     console.log(headingIndexForToc);
     headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
     return;
   }
   //#endregion
+  //#region on press K - scroll headings up
+  if (key.name === "k" && headingsArrayForToc.length > 0 && isCapital) {
+    headingIndexForToc =
+      (headingIndexForToc - 1 + headingsArrayForToc.length) %
+      headingsArrayForToc.length;
+    const id = headingsArrayForToc[headingIndexForToc]?.id;
+    if (!id) return;
+    const heading = root.findDescendantById(id);
+    const y = heading?.y;
+    if (y === undefined || !heading) return;
+    process.nextTick(() =>
+      contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
+    );
+    tocMenu.setSelectedIndex(headingIndexForToc);
+    console.log("K", headingIndexForToc);
+    return;
+  }
+  //#endregion
   //#region on press T - table of contents
-  if (key.name === "t" && (key.capsLock ? !key.shift : key.shift)) {
+  if (key.name === "t" && isCapital) {
     tocBox.visible = !tocBox.visible;
     console.log("triggered");
     return;
@@ -1096,3 +1135,57 @@ renderer.keyInput.on("keypress", keyHandler);
 renderer.once("destroy", () => {
   renderer.keyInput.off("keypress", keyHandler);
 });
+
+//#region sync toc and scrollbox
+// when you scroll, this is the code that updates the toc with the heading
+let lastScrollTop = contentScrollBox.scrollTop;
+renderer.on("frame", () => {
+  const scrollTop = contentScrollBox.scrollTop;
+  if (scrollTop === lastScrollTop) return;
+  syncToC();
+  lastScrollTop = scrollTop;
+  console.log({
+    contentScrollBox: [contentScrollBox.y, contentScrollBox.height],
+    wrapper: [contentScrollBox.wrapper.y, contentScrollBox.wrapper.height],
+    viewport: [contentScrollBox.viewport.y, contentScrollBox.viewport.height],
+    content: [contentScrollBox.content.y, contentScrollBox.content.height],
+    scrollbar: [
+      contentScrollBox.verticalScrollBar.y,
+      contentScrollBox.verticalScrollBar.height,
+    ],
+  });
+});
+function syncToC() {
+  if (headingsArrayForToc.length === 0) return;
+  if (
+    contentScrollBox.scrollTop >=
+    Math.max(
+      0,
+      contentScrollBox.scrollHeight - contentScrollBox.viewport.height,
+    )
+  ) {
+    const lastIndex = headingsArrayForToc.length - 1;
+    if (tocMenu.getSelectedIndex() !== lastIndex) {
+      tocMenu.setSelectedIndex(lastIndex);
+    }
+    return;
+  }
+  let low = 0;
+  let high = headingsArrayForToc.length - 1;
+  let activeIndex = 0;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const y = headingsArrayForToc[mid]?.renderable.screenY;
+    if (y === undefined) return;
+    if (y <= contentScrollBox.screenY) {
+      activeIndex = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  if (tocMenu.getSelectedIndex() !== activeIndex) {
+    tocMenu.setSelectedIndex(activeIndex);
+  }
+}
+//#endregion

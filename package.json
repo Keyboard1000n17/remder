@@ -4,15 +4,15 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "^1.4.1",
+    "@types/bun": "^1.4.2",
     "@types/markdown-it-emoji": "^3.0.1",
-    "@types/node": "^26.4.1"
+    "@types/node": "^26.5.0"
   },
   "peerDependencies": {
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@opentui/core": "^0.5.10",
+    "@opentui/core": "^0.5.11",
     "@resvg/resvg-js": "^2.6.2",
     "@types/figlet": "^1.7.0",
     "ansi-sequence-parser": "^1.1.3",

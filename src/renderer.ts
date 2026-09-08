@@ -32,7 +32,7 @@ import got from "got";
 import chalk from "chalk";
 import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
-import { openSync } from "node:fs";
+import { close, openSync } from "node:fs";
 import type { FontName } from "figlet";
 //#endregion
 
@@ -808,18 +808,7 @@ export async function renderMarkdown(
       //#endregion
       //#region details
       case "details":
-        const summaryBox = new BoxRenderable(ctx, {
-          width: "100%",
-          border: true,
-          flexDirection: "column",
-          rowGap: 1,
-          onMouseDown: () => {
-            const detailsElement =
-              summaryBox.findDescendantById("details-element");
-            if (detailsElement)
-              detailsElement.visible = !detailsElement.visible;
-          },
-        });
+        const detailsId = crypto.randomUUID();
         const detailsContent = token.content as ProcessedToken[];
         const firstToken = detailsContent[0];
         const summaryText = Text({
@@ -833,7 +822,51 @@ export async function renderMarkdown(
             ctx,
           ),
         );
-        summaryBox.add(summaryText);
+        const isOpen = token.properties.open;
+        const indicators = Box(
+          { id: `indicators-details-${detailsId}` },
+          Text({
+            content: "⏵",
+            visible: isOpen ? false : true,
+            id: `closed-indicator-${detailsId}`,
+          }),
+          Text({
+            content: "⏷",
+            visible: isOpen ? true : false,
+            id: `open-indicator-${detailsId}`,
+          }),
+        );
+        const onSelect = () => {
+          const detailsElement =
+            summaryBox.findDescendantById("details-element");
+          if (detailsElement) detailsElement.visible = !detailsElement.visible;
+          const openIndicator = summaryBox.findDescendantById(
+            `open-indicator-${summaryBox.id}`,
+          );
+          const closedIndicator = summaryBox.findDescendantById(
+            `closed-indicator-${summaryBox.id}`,
+          );
+          [openIndicator!.visible!, closedIndicator!.visible!] = [
+            closedIndicator!.visible,
+            openIndicator!.visible,
+          ];
+        };
+        const summaryBox = new BoxRenderable(ctx, {
+          width: "100%",
+          border: true,
+          flexDirection: "column",
+          rowGap: 1,
+          id: detailsId,
+          onMouseDown: onSelect,
+          onKeyDown: (key: KeyEvent) => {
+            if (key.name === "space" || key.name === "enter") {
+              onSelect();
+            }
+          },
+        });
+        summaryBox.add(
+          Box({ flexDirection: "row", gap: 1 }, indicators, summaryText),
+        );
         summaryBox.add(detailsBox);
         componentArray.push(summaryBox);
         break;

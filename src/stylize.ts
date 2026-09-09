@@ -1,3 +1,4 @@
+//#region imports
 import Chalk from "chalk";
 import terminalLink from "terminal-link";
 import terminalImage from "terminal-image";
@@ -5,7 +6,9 @@ import got from "got";
 import { Resvg } from "@resvg/resvg-js";
 import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
+//#endregion
 
+//#region type definitions
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
 type TerminalImageOpts = {
@@ -36,12 +39,12 @@ export type HeadingObject = {
 export interface ProcessedToken {
   type: string;
   content:
-    | string
-    | Image
-    | (ProcessedToken | Image)[]
-    | { code: string; language: string }
-    | TableToken[][]
-    | HeadingObject;
+  | string
+  | Image
+  | (ProcessedToken | Image)[]
+  | { code: string; language: string }
+  | TableToken[][]
+  | HeadingObject;
   properties: {
     [type: string]: any;
   };
@@ -59,6 +62,7 @@ const enum FontStyle {
   Underline = 4,
   Strikethrough = 8,
 }
+//#endregion
 
 let state: StateEntry[] = []; // global var
 
@@ -169,9 +173,7 @@ async function renderInline(tokens: Token[]) {
           i++;
           const linkTextToken = token.children[i];
           if (!linkTextToken)
-            throw new Error(
-              Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-            );
+            throw new Error(`Something went wrong. This shouldn't happen.`);
           const linkText = linkTextToken.content;
           text += Chalk.underline(terminalLink(linkText, String(linkUrl)));
           //#endregion
@@ -181,9 +183,7 @@ async function renderInline(tokens: Token[]) {
           i++;
           const abbrTextToken = token.children[i];
           if (!abbrTextToken)
-            throw new Error(
-              Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-            );
+            throw new Error(`Something went wrong. This shouldn't happen.`);
           const abbreviatedText = abbrTextToken.content ?? "";
           if (abbreviation && abbreviation.length > 0) {
             text += `${abbreviatedText} (${abbreviation})`;
@@ -586,9 +586,9 @@ export default async function stylize(input: Token[]) {
         push.content =
           tokenType === "heading"
             ? await handler(
-                accumulatedTokens,
-                parseInt(token.tag.split("")[1]!),
-              )
+              accumulatedTokens,
+              parseInt(token.tag.split("")[1]!),
+            )
             : await handler(accumulatedTokens);
         const unknownTagString: ProcessedToken = {
           type: "paragraph",
@@ -620,10 +620,10 @@ export default async function stylize(input: Token[]) {
         Chalk.red.bold(
           "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
         ) +
-          "\n" +
-          Chalk.dim(
-            `PS: the token type was ${token.type}. Its index is ${index} `,
-          ),
+        "\n" +
+        Chalk.dim(
+          `PS: the token type was ${token.type}. Its index is ${index} `,
+        ),
       );
     }
 

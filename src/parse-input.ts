@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import GithubAlerts from "markdown-it-github-alerts";
+import footnote from "markdown-it-footnote";
 import { full as emoji } from "markdown-it-emoji";
 import { Parser } from "htmlparser2";
 import { Chalk } from "chalk";
@@ -157,7 +158,8 @@ export default function parse(input: string) {
     linkify: true,
   })
     .use(GithubAlerts)
-    .use(emoji);
+    .use(emoji)
+    .use(footnote);
   // doing type:any is fine here
   md.core.ruler.after("inline", "processHTML", (state: any) => {
     const parsedTokens: Token[] = [];

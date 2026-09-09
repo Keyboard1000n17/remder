@@ -871,6 +871,8 @@ export async function renderMarkdown(
         componentArray.push(summaryBox);
         break;
       //#endregion
+      //#region footnotes
+      //#endregion
       //#region default
       default:
         console.log("DEFAULT CASE:", token);
@@ -971,6 +973,10 @@ if (args.positionals.length > 0) {
     );
     process.exit(0);
   } else {
+    const renderables = await renderMarkdown(
+      tokens as ProcessedToken[],
+      renderer,
+    );
     const box = new ScrollBoxRenderable(renderer, {
       width: "auto",
       minWidth: 0,
@@ -983,10 +989,6 @@ if (args.positionals.length > 0) {
         rowGap: 1,
       },
     });
-    const renderables = await renderMarkdown(
-      tokens as ProcessedToken[],
-      renderer,
-    );
     renderables.forEach((renderable) => {
       // box.add(Box({ border: true, margin: 0 }, renderable));
       box.add(renderable);

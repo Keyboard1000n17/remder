@@ -5,6 +5,7 @@ import got from "got";
 import { Resvg } from "@resvg/resvg-js";
 import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
+import { join } from "path";
 
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
@@ -13,19 +14,13 @@ type TerminalImageOpts = {
   width?: string | number;
   height?: string | number;
 };
-type Handlers = {
-  [type: string]: (
-    token: Token[],
-    level?: number,
-  ) => Promise<
-    | ProcessedToken
-    | (ProcessedToken | Image)[]
-    | ProcessedToken[]
-    | string
-    | void
-    | HeadingObject
-  >;
-};
+type Handler = (
+  token: Token[],
+  filePath: string,
+  level?: number,
+) => Promise<ProcessedToken[] | string | HeadingObject>;
+
+type Handlers = Record<string, Handler>;
 
 export type HeadingObject = {
   text: string;
@@ -33,25 +28,151 @@ export type HeadingObject = {
   level: number;
 };
 
-export interface ProcessedToken {
-  type: string;
-  content:
-    | string
-    | Image
-    | (ProcessedToken | Image)[]
-    | { code: string; language: string }
-    | TableToken[][]
-    | HeadingObject;
+type ProcessedTokenTypes =
+  | "paragraph"
+  | "table"
+  | "table-cell"
+  | "image"
+  | "text"
+  | "alert"
+  | "thematic-break"
+  | "codeBlock"
+  | "heading"
+  | "bullet_list"
+  | "ordered_list"
+  | "details"
+  | "summary"
+  | "content"
+  | "list_item"
+  | "blockquote"
+  | "div"
+  | "";
+
+//#region token definitions
+interface BaseProcessedToken {
+  type: ProcessedTokenTypes;
   properties: {
     [type: string]: any;
   };
 }
 
-export interface TableToken extends ProcessedToken {
+interface TableCellToken extends BaseProcessedToken {
   type: "table-cell";
-  content: (ProcessedToken | Image)[];
+  content: ProcessedToken[];
   properties: { textAlign: "left" | "center" | "right" };
 }
+
+interface TableToken extends BaseProcessedToken {
+  type: "table";
+  content: TableCellToken[][];
+}
+
+interface ImageToken extends BaseProcessedToken {
+  type: "image";
+  content: Image;
+}
+
+interface TextToken extends BaseProcessedToken {
+  type: "text";
+  content: string;
+}
+
+interface ParagraphToken extends BaseProcessedToken {
+  type: "paragraph";
+  content: (TextToken | ImageToken)[];
+}
+
+interface AlertToken extends BaseProcessedToken {
+  type: "alert";
+  content: ProcessedToken[];
+  properties: {
+    alertType: string;
+  };
+}
+
+interface ThematicBreakToken extends BaseProcessedToken {
+  type: "thematic-break";
+  content: "";
+}
+
+interface CodeBlockToken extends BaseProcessedToken {
+  type: "codeBlock";
+  content: {
+    code: string;
+    language: string;
+  };
+}
+
+interface HeadingToken extends BaseProcessedToken {
+  type: "heading";
+  content: HeadingObject;
+}
+
+interface BulletListToken extends BaseProcessedToken {
+  type: "bullet_list";
+  content: ProcessedToken[];
+}
+
+interface OrderedListToken extends BaseProcessedToken {
+  type: "ordered_list";
+  content: ProcessedToken[];
+}
+
+interface ListItemToken extends BaseProcessedToken {
+  type: "list_item";
+  content: ProcessedToken[];
+}
+
+interface EmptyToken extends BaseProcessedToken {
+  type: "";
+  content: "";
+}
+
+interface DetailsSummaryToken extends BaseProcessedToken {
+  type: "summary";
+  content: string | ProcessedToken[];
+}
+
+interface DetailsContentToken extends BaseProcessedToken {
+  type: "content";
+  content: ProcessedToken[];
+}
+
+interface DetailsToken extends BaseProcessedToken {
+  type: "details";
+  content: (DetailsSummaryToken | DetailsContentToken)[];
+}
+
+interface BlockquoteToken extends BaseProcessedToken {
+  type: "blockquote";
+  content: ProcessedToken[];
+}
+
+interface DivToken extends BaseProcessedToken {
+  type: "div";
+  content: ProcessedToken[];
+}
+//#endregion
+
+export type ProcessedToken =
+  | EmptyToken
+  | ImageToken
+  | TextToken
+  | ParagraphToken
+  | TableToken
+  | TableCellToken
+  | AlertToken
+  | CodeBlockToken
+  | BulletListToken
+  | OrderedListToken
+  | HeadingToken
+  | DetailsToken
+  | DetailsSummaryToken
+  | DetailsContentToken
+  | ListItemToken
+  | BlockquoteToken
+  | DivToken
+  | ThematicBreakToken;
 
 const enum FontStyle {
   Italic = 1,
@@ -63,40 +184,52 @@ const enum FontStyle {
 let state: StateEntry[] = []; // global var
 
 export class Image {
-  public content: any;
+  public imageBuffer: Uint8Array<ArrayBuffer> | null;
   public type: "image";
   public properties: {};
   constructor(
     public path: string,
+    public filePath: string,
     public imageAlt: string,
     public opts: object,
   ) {
-    this.content = Image.#getBuffer(path);
+    this.imageBuffer = null;
     this.type = "image";
     this.properties = {};
   }
-  static async #getBuffer(path: string) {
+  static async create(
+    path: string,
+    filePath: string,
+    imageAlt: string,
+    opts: object,
+  ) {
+    const image = new Image(path, filePath, imageAlt, opts);
+    image.imageBuffer = await Image.#getBuffer(filePath, path);
+    return image;
+  }
+  static async #getBuffer(filePath: string, path: string) {
     try {
       return URL.canParse(path)
         ? (await got(path)).rawBody
-        : Bun.file(path).arrayBuffer();
+        : await Bun.file(join(filePath, path)).bytes();
     } catch (err) {
       return null;
     }
   }
   async render() {
     const path = this.path;
-    const buffer = await this.content;
+    const buffer = this.imageBuffer;
     if (!buffer) return Chalk.dim(this.imageAlt);
     let rendered = "";
     if (path.match(/\.svg$/)) {
       console.log(buffer);
       try {
         rendered = await terminalImage.buffer(
-          new Resvg(buffer).render().asPng(),
+          new Resvg(Buffer.from(buffer)).render().asPng(),
           this.opts,
         );
       } catch (err) {
+        console.error(err);
         rendered = Chalk.dim(this.imageAlt);
       }
     } else if (path.match(/\.webp$/)) {
@@ -115,7 +248,11 @@ const term: string | undefined = process.env.TERM;
 if (term === undefined)
   throw new Error(`A TUI can not be run in the background!`);
 
-async function image(token: Token, areThereOtherTokens: boolean) {
+async function image(
+  token: Token,
+  filePath: string,
+  areThereOtherTokens: boolean,
+) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
     throw new Error(
@@ -132,7 +269,7 @@ async function image(token: Token, areThereOtherTokens: boolean) {
   } else {
     terminalImageOpts.width = token.attrGet("width") || "50%";
   }
-  return new Image(String(path), String(alt), terminalImageOpts);
+  return new Image(String(path), filePath, String(alt), terminalImageOpts);
 }
 
 const inline: Record<string, (text: string) => string> = {
@@ -148,114 +285,112 @@ const inline: Record<string, (text: string) => string> = {
   text: (text: string) => text,
 };
 
-async function renderInline(tokens: Token[]) {
+async function renderInline(token: Token, filePath?: string) {
   const styled: ProcessedToken[] = [];
-  for (const token of tokens) {
-    if (token.type === "inline") {
-      state.push("inline");
-      let i = 0;
-      let text = "";
-      if (!token.children)
+  if (token.type === "inline") {
+    state.push("inline");
+    let i = 0;
+    let text = "";
+    if (!token.children)
+      throw new Error(`Something went wrong. This shouldn't happen.`);
+    // if this error ever happens, my first thought will be "how the fuck did that happen"
+    while (i < token.children.length) {
+      const child = token.children[i];
+      if (!child)
         throw new Error(`Something went wrong. This shouldn't happen.`);
-      // if this error ever happens, my first thought will be "how the fuck did that happen"
-      while (i < token.children.length) {
-        const child = token.children[i];
-        if (!child)
-          throw new Error(`Something went wrong. This shouldn't happen.`);
-        const type = child.type;
-        if (type === "link_open") {
-          //#region links
-          const linkUrl = child.attrGet("href") ?? "";
-          i++;
-          const linkTextToken = token.children[i];
-          if (!linkTextToken)
-            throw new Error(
-              Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-            );
-          const linkText = linkTextToken.content;
-          text += Chalk.underline(terminalLink(linkText, String(linkUrl)));
-          //#endregion
-        } else if (type === "abbr_open") {
-          //#region abbreviations
-          const abbreviation = String(child.attrGet("title"));
-          i++;
-          const abbrTextToken = token.children[i];
-          if (!abbrTextToken)
-            throw new Error(
-              Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-            );
-          const abbreviatedText = abbrTextToken.content ?? "";
-          if (abbreviation && abbreviation.length > 0) {
-            text += `${abbreviatedText} (${abbreviation})`;
-          } else {
-            text += abbreviatedText;
-          }
-          text +=
-            abbreviation && abbreviation.length > 0
-              ? `${abbreviatedText} (${abbreviation})`
-              : abbreviatedText;
-          //#endregion
-        } else if (/_open/.test(type)) {
-          //#region
-          state.push(type.split("_")[0]!);
-          //#endregion
-        } else if (/_close/.test(type)) {
-          //#region
-          state.pop();
-          //#endregion
-        } else if (type === "image") {
-          //#region images
-          styled.push({ type: "text", content: text, properties: {} });
-          text = "";
-          const areThereOtherTokens = token.children.length > 1;
-          styled.push({
-            type: "image",
-            content: await image(child, areThereOtherTokens),
-            properties: {},
-          } as ProcessedToken);
-          //#endregion
-        } else if (type === "softbreak") {
-          //#region softbreaks
-          text += " ";
-          //#endregion
-        } else if (type === "hardbreak") {
-          //#region hardbreaks
-          text += "\n\n";
-          //#endregion
-        } else if (type === "code_inline") {
-          //#region inline code
-          text += inline.code!(` ${child.content} `);
-          //#endregion
-        } else if (type === "emoji") {
-          text += child.content;
-        } else if (type === "text") {
-          //#region text
-          const nesting = state.slice(state.indexOf("inline") + 1);
-          let temp = child.content;
-          for (const style of nesting) {
-            const handler = inline[style];
-            if (handler) {
-              temp = handler(temp);
-            } else {
-              temp += `\n`;
-            }
-          }
-          text += temp;
-          //#endregion
-        } else {
-          //#region
-          handleTokens.default!([child]);
-          //#endregion
-        }
+      const type = child.type;
+      if (type === "link_open") {
+        //#region links
+        const linkUrl = child.attrGet("href") ?? "";
         i++;
-      }
-      if (text !== "")
+        const linkTextToken = token.children[i];
+        if (!linkTextToken)
+          throw new Error(
+            Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+          );
+        const linkText = linkTextToken.content;
+        text += Chalk.underline(terminalLink(linkText, String(linkUrl)));
+        //#endregion
+      } else if (type === "abbr_open") {
+        //#region abbreviations
+        const abbreviation = String(child.attrGet("title"));
+        i++;
+        const abbrTextToken = token.children[i];
+        if (!abbrTextToken)
+          throw new Error(
+            Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
+          );
+        const abbreviatedText = abbrTextToken.content ?? "";
+        if (abbreviation && abbreviation.length > 0) {
+          text += `${abbreviatedText} (${abbreviation})`;
+        } else {
+          text += abbreviatedText;
+        }
+        text +=
+          abbreviation && abbreviation.length > 0
+            ? `${abbreviatedText} (${abbreviation})`
+            : abbreviatedText;
+        //#endregion
+      } else if (/_open/.test(type)) {
+        //#region
+        state.push(type.split("_")[0]!);
+        //#endregion
+      } else if (/_close/.test(type)) {
+        //#region
+        state.pop();
+        //#endregion
+      } else if (type === "image") {
+        //#region images
+        styled.push({ type: "text", content: text, properties: {} });
+        text = "";
+        const areThereOtherTokens = token.children.length > 1;
         styled.push({
-          type: "text",
-          content: text,
+          type: "image",
+          content: await image(child, filePath || "", areThereOtherTokens),
           properties: {},
         } as ProcessedToken);
+        //#endregion
+      } else if (type === "softbreak") {
+        //#region softbreaks
+        text += " ";
+        //#endregion
+      } else if (type === "hardbreak") {
+        //#region hardbreaks
+        text += "\n\n";
+        //#endregion
+      } else if (type === "code_inline") {
+        //#region inline code
+        text += inline.code!(` ${child.content} `);
+        //#endregion
+      } else if (type === "emoji") {
+        text += child.content;
+      } else if (type === "text") {
+        //#region text
+        const nesting = state.slice(state.indexOf("inline") + 1);
+        let temp = child.content;
+        for (const style of nesting) {
+          const handler = inline[style];
+          if (handler) {
+            temp = handler(temp);
+          } else {
+            temp += `\n`;
+          }
+        }
+        text += temp;
+        //#endregion
+      } else {
+        //#region
+        handleTokens.default!([child], filePath || "");
+        //#endregion
+      }
+      i++;
     }
+    if (text !== "")
+      styled.push({
+        type: "text",
+        content: text,
+        properties: {},
+      } as ProcessedToken);
   }
   state.pop();
   return styled;
@@ -342,13 +477,16 @@ export async function codeBlock(token: Token) {
   }
 }
 
-export async function table(tokens: Token[]) {
+export async function table(tokens: Token[], filePath: string) {
   const tableRows: any[] = [];
   const currentRow: any[] = [];
   let currentAlign = "";
 
   // State & Parsing Handlers
-  const handlers: Record<string, (t: Token) => void | Promise<void>> = {
+  const handlers: Record<
+    string,
+    (t: Token, filePath: string) => void | Promise<void>
+  > = {
     thead_open: (): void => {
       state.push("thead");
     },
@@ -379,10 +517,10 @@ export async function table(tokens: Token[]) {
       );
       currentAlign = alignMatch?.[1] ?? "left";
     },
-    inline: async (token: Token): Promise<void> => {
+    inline: async (token: Token, filePath: string): Promise<void> => {
       currentRow.push({
         type: "table-cell",
-        content: await renderInline([token]),
+        content: await renderInline(token, filePath),
         properties: { textAlign: currentAlign },
       } as ProcessedToken);
     },
@@ -392,25 +530,28 @@ export async function table(tokens: Token[]) {
   for (const token of tokens) {
     const type = token.type;
     const handle = handlers[type];
-    if (handle) await handle(token);
+    if (handle) await handle(token, filePath);
   }
 
   return tableRows;
 }
 
-async function alerts(tokens: Token[]) {
+async function alerts(tokens: Token[], filePath: string): Promise<AlertToken> {
   const children = tokens.slice(1, -2);
-  const stylizedChildren = await stylize(children);
+  const stylizedChildren = await stylize(children, filePath);
   return {
     type: "alert",
     content: stylizedChildren,
     properties: {
-      alertType: tokens[0]?.meta?.title || "",
+      alertType: (tokens[0]?.meta?.title as string) || "",
     },
-  } as ProcessedToken;
+  };
 }
 
-async function details(tokens: Token[]) {
+async function details(
+  tokens: Token[],
+  filePath: string,
+): Promise<ProcessedToken[]> {
   const tokenStack = [];
   const firstToken: Token | undefined = tokens[0];
   if (!firstToken) throw new Error("This shouldn't have errored!");
@@ -418,25 +559,25 @@ async function details(tokens: Token[]) {
     if (!tokens[1]) throw new Error("How did this happen?");
     tokenStack.push({
       type: "summary",
-      content: await renderInline([tokens[1]]),
+      content: await renderInline(tokens[1], filePath),
       properties: {},
-    });
+    } satisfies DetailsSummaryToken);
     tokenStack.push({
       type: "content",
-      content: await stylize(tokens.slice(3)),
+      content: await stylize(tokens.slice(3), filePath),
       properties: {},
-    });
+    } satisfies DetailsContentToken);
   } else {
     tokenStack.push({
       type: "summary",
       content: "Details",
       properties: {},
-    });
+    } satisfies DetailsSummaryToken);
     tokenStack.push({
       type: "content",
-      content: await stylize(tokens),
+      content: await stylize(tokens, filePath),
       properties: {},
-    });
+    } satisfies DetailsContentToken);
   }
   return tokenStack;
 }
@@ -454,21 +595,33 @@ const handleTokens: Handlers = {
         accumulatedTokenContentString += token.content;
       }
     });
+    return "";
   },
-  paragraph: async (tokens: Token[]) => await renderInline(tokens), // it's always just one inline token
-  table: async (tokens: Token[]) => await table(tokens),
-  heading: async (tokens: Token[], level?: number | 1) =>
+  paragraph: async (tokens: Token[], filePath: string) =>
+    await renderInline(tokens[0]!, filePath), // it's always just one inline token
+  table: async (tokens: Token[], filePath: string) =>
+    await table(tokens, filePath),
+  heading: async (tokens: Token[], _, level?: number | 1) =>
     heading(tokens[0]!, level),
-  div: async (tokens: Token[]) => await stylize(tokens),
-  blockquote: async (tokens: Token[]) => await stylize(tokens),
-  bullet_list: async (tokens: Token[]) => await stylize(tokens),
-  ordered_list: async (tokens: Token[]) => await stylize(tokens),
-  list_item: async (tokens: Token[]) => await stylize(tokens),
-  ruby: async (tokens: Token[]) => await stylize(tokens),
+  div: async (tokens: Token[], filePath: string) =>
+    await stylize(tokens, filePath),
+  blockquote: async (tokens: Token[], filePath: string) =>
+    await stylize(tokens, filePath),
+  bullet_list: async (tokens: Token[], filePath: string) =>
+    await stylize(tokens, filePath),
+  ordered_list: async (tokens: Token[], filePath: string) =>
+    await stylize(tokens, filePath),
+  list_item: async (tokens: Token[], filePath: string) =>
+    await stylize(tokens, filePath),
+  ruby: async (tokens: Token[], filePath: string) =>
+    await stylize(tokens, filePath),
   // these ones recurse because they're container blocks
-  details: async (tokens: Token[]) => await details(tokens),
-  rp: async (tokens: Token[]) => await renderInline([tokens[0]!]),
-  rt: async (tokens: Token[]) => await renderInline([tokens[0]!]),
+  details: async (tokens: Token[], filePath: string) =>
+    await details(tokens, filePath),
+  rp: async (tokens: Token[], filePath: string) =>
+    await renderInline(tokens[0]!, filePath),
+  rt: async (tokens: Token[], filePath: string) =>
+    await renderInline(tokens[0]!, filePath),
   pre: async (tokens: Token[]) => {
     let builtString = "";
     for (const token of tokens) {
@@ -490,58 +643,71 @@ const handleTokens: Handlers = {
 let accumulatedTokenContentString = "";
 
 // NOTE: chatgpt generated this, and i can not be bothered to do this myself
-function removeWhitespaceTokens(
-  tokens: (ProcessedToken | Image)[],
-): (ProcessedToken | Image)[] {
+function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
   return tokens
     .map((token) => {
-      if (
-        token.type === "table" &&
-        Array.isArray(token.content) &&
-        token.content.every((row) => Array.isArray(row))
-      ) {
-        return {
-          ...token,
-          content: token.content.map((row) =>
-            row.map((cell) => {
-              return { ...cell, content: removeWhitespaceTokens(cell.content) };
-            }),
-          ),
-        };
+      switch (token.type) {
+        case "table": {
+          return {
+            ...token,
+            content: token.content.map((row) =>
+              row.map((cell) => {
+                return {
+                  ...cell,
+                  content: removeWhitespaceTokens(cell.content),
+                };
+              }),
+            ),
+          };
+        }
+        case "bullet_list":
+        case "ordered_list":
+        case "list_item":
+        case "alert":
+        case "paragraph":
+          return {
+            ...token,
+            content: removeWhitespaceTokens(token.content),
+          };
+        case "text":
+          if (typeof token.content !== "string")
+            throw new Error(
+              `Token content was somehow ${JSON.stringify(token.content, null, 2)} instead of string`,
+            );
+          return {
+            ...token,
+            content: token.content.trim(),
+          };
+        default:
+          return token;
       }
-      if (
-        !("imageAlt" in token) &&
-        Array.isArray(token.content) &&
-        !token.content.every((row) => Array.isArray(row))
-      ) {
-        return {
-          ...token,
-          content: removeWhitespaceTokens(token.content),
-        };
-      }
-      return token;
     })
     .filter((token) => {
-      if (!("imageAlt" in token) && !Array.isArray(token)) {
-        if (typeof token.content === "string") {
-          return token.content.trim() !== "";
-        }
-        if (Array.isArray(token.content)) {
-          return token.content.length > 0;
-        }
+      if (token.type === "text") {
+        return token.content !== "";
+      }
+      if (Array.isArray(token.content)) {
+        return token.content.length > 0;
       }
       return true;
     });
 }
 
-export default async function stylize(input: Token[]) {
+export default async function stylize(
+  input: Token[],
+  filePath: string,
+): Promise<ProcessedToken[]> {
   // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
   let index = 0;
 
   while (index < input.length) {
-    let push: ProcessedToken = {
-      type: "",
+    let push: {
+      type: ProcessedTokenTypes;
+      content: ProcessedToken["content"];
+      properties: { [type: string]: string };
+    } = {
+      type: "" as ProcessedTokenTypes,
       content: "",
       properties: {},
     };
@@ -551,7 +717,7 @@ export default async function stylize(input: Token[]) {
     // give attrs
     if (token.attrs) {
       for (let [key, value] of token.attrs) {
-        push.properties[key] = value;
+        push.properties[key] = String(value);
       }
     }
 
@@ -562,12 +728,15 @@ export default async function stylize(input: Token[]) {
         index++;
       }
       accumulatedTokens.push(input[index]); // should push a token with type "alert_close"
-      const processedAlertToken = await alerts(accumulatedTokens as Token[]);
+      const processedAlertToken = await alerts(
+        accumulatedTokens as Token[],
+        filePath,
+      );
       push = processedAlertToken;
     } else if (token.type.match(/_open/)) {
       const accumulatedTokens: Token[] = [];
       index++;
-      const tokenType = token.type.replace("_open", "");
+      const tokenType = token.type.replace("_open", "") as ProcessedTokenTypes;
       if (!input[index]) {
         throw new Error(
           `Token at index ${index} is undefined. The length of the input array is ${input.length} `,
@@ -577,29 +746,33 @@ export default async function stylize(input: Token[]) {
         accumulatedTokens.push(input[index]!);
         index++;
       }
-      const handler:
-        ((tokens: Token[], level?: number) => Promise<any>) | undefined =
-        handleTokens[tokenType];
+      const handler: Handler | undefined = handleTokens[tokenType];
       state.push(tokenType);
       if (handler) {
         push.type = tokenType;
         push.content =
           tokenType === "heading"
             ? await handler(
-                accumulatedTokens,
-                parseInt(token.tag.split("")[1]!),
-              )
-            : await handler(accumulatedTokens);
+              accumulatedTokens,
+              filePath,
+              parseInt(token.tag.split("")[1]!),
+            )
+            : await handler(accumulatedTokens, filePath);
         const unknownTagString: ProcessedToken = {
           type: "paragraph",
-          content: accumulatedTokenContentString,
+          content: [
+            {
+              type: "text",
+              content: accumulatedTokenContentString,
+              properties: {},
+            },
+          ],
           properties: {},
         };
         output.push(unknownTagString);
         accumulatedTokenContentString = "";
       } else if (accumulatedTokens.length > 0) {
-        await handleTokens.default!(accumulatedTokens);
-        stylize;
+        await handleTokens.default!(accumulatedTokens, filePath);
       }
       state.pop();
     } else if (token.type === "fence" || token.type === "code_block") {
@@ -613,22 +786,20 @@ export default async function stylize(input: Token[]) {
       push.content = "";
       state.pop();
     } else if (token.type === "inline") {
-      push.type = "text";
-      push.content = await renderInline([token]);
+      push.type = "paragraph";
+      push.content = await renderInline(token);
     } else {
       throw new Error(
-        Chalk.red.bold(
-          "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function",
-        ) +
-          "\n" +
-          Chalk.dim(
-            `PS: the token type was ${token.type}. Its index is ${index} `,
-          ),
+        "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function" +
+        "\n" +
+        Chalk.dim(
+          `PS: the token type was ${token.type}. Its index is ${index} `,
+        ),
       );
     }
 
     // no more! push the `push` object to the output array
-    output.push(push);
+    output.push(push as ProcessedToken);
     index++;
   }
 

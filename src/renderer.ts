@@ -1,15 +1,10 @@
 //#region imports
 import parseInput from "./parse-input.ts";
-import stylize, {
-  Image,
-  type HeadingObject,
-  type ProcessedToken,
-} from "./stylize.ts";
+import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.ts";
 import {
   createCliRenderer,
   Box,
   Text,
-  type ProxiedVNode,
   Select,
   type TextChunk,
   TextTableRenderable,
@@ -32,7 +27,7 @@ import got from "got";
 import chalk from "chalk";
 import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
-import { close, openSync } from "node:fs";
+import { openSync } from "node:fs";
 import type { FontName } from "figlet";
 //#endregion
 
@@ -260,8 +255,8 @@ function makeTaskList(item: ProcessedToken) {
   for (const child of item.content as ProcessedToken[]) {
     switch (child.type) {
       case "paragraph":
-        (child.content as ProcessedToken[]).forEach((text) => {
-          if (typeof text.content === "string") {
+        child.content.forEach((text) => {
+          if (text.type === "text") {
             const startsWith = text.content.match(/^\[[ xX]\]\s*/);
             const replace = (text: string, toReplace: string) =>
               toReplace.trim().toLowerCase() === "[x]"
@@ -331,28 +326,16 @@ const args = parseArgs({
 
 async function renderTable(tableToken: ProcessedToken) {
   const rows: TextChunk[][][] = [];
-  if (!Array.isArray(tableToken.content))
+  if (tableToken.type !== "table")
     throw new Error(
       `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
     );
   for (const row of tableToken.content) {
     const cells: TextChunk[][] = [];
-    if (!Array.isArray(row))
-      throw new Error(
-        `Table token type is somehow ${typeof row} instead of an array!`,
-      );
     for (const cell of row) {
-      if (cell.type !== "table-cell") {
-        throw new Error(`Cell type was ${cell.type} instead of "table-cell"!`);
-      }
       for (const item of cell.content) {
         let cellText = "";
         if (item.type === "text") {
-          if (typeof item.content !== "string") {
-            throw new Error(
-              `The type of the table cell content was ${typeof item.content} instead of string!`,
-            );
-          }
           cellText +=
             rows.length === 0 ? chalk.bold(item.content) : item.content;
         } else if (item.type === "image") {
@@ -378,82 +361,82 @@ async function renderTable(tableToken: ProcessedToken) {
 
 // NOTE: chatgpt made a prototype of this
 // TODO: finish this soon
-async function tokensToString(
-  tokens: (ProcessedToken | Image)[],
-  isRecursing?: boolean,
-): Promise<string> {
-  return (
-    await Promise.all(
-      tokens.map(async (token): Promise<string> => {
-        if (typeof token.content === "string") {
-          return token.content
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0)
-            .join("\n");
-        } else if ("imageAlt" in token) {
-          return args.values.noRenderImages
-            ? await token.render()
-            : chalk.dim(token.imageAlt);
-        } else if (
-          Array.isArray(token.content) &&
-          !token.content.every((arr) => Array.isArray(arr))
-        ) {
-          if (token.type === "bullet_list") {
-            let str = "";
-            for (const child of token.content as ProcessedToken[]) {
-              if (child.type !== "list_item") throw new Error("Huh?");
-              str += `\u2022 ${await tokensToString(child.content as (ProcessedToken | Image)[])}\n`;
-            }
-            return str;
-          } else if (token.type === "ordered_list") {
-            let number = token.properties.start || 1;
-            let str = "";
-            for (const child of token.content) {
-              const content = Array.isArray(child) ? child : child.content;
-              str += `${number}. ${await tokensToString(content)}\n`;
-              number++;
-            }
-            return str;
-          } else if (token.type === "blockquote") {
-            let str = "";
-            for (const child of token.content) {
-              if (Array.isArray(child)) continue;
-              const blockquoteContent = await tokensToString(
-                isRecursing
-                  ? [child]
-                  : (child.content as (ProcessedToken | Image)[]),
-                true,
-              );
-              str += `\u258c ${blockquoteContent
-                .split("\n")
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0)
-                .join("\n\u258c ")}\n`;
-            }
-            return str;
-          } else {
-            return await tokensToString(token.content);
-          }
-        } else if (
-          typeof token.content === "object" &&
-          "code" in token.content
-        ) {
-          return token.content.code;
-        } else if (
-          typeof token.content === "object" &&
-          !("imageAlt" in token.content) &&
-          token.type === "heading"
-        ) {
-          let str = "";
-          const tokenContent = token.content as HeadingObject;
-          return str;
-        }
-        return "";
-      }),
-    )
-  ).join("\n");
-}
+// async function tokensToString(
+//   tokens: ProcessedToken[],
+//   isRecursing?: boolean,
+// ): Promise<string> {
+//   return (
+//     await Promise.all(
+//       tokens.map(async (token): Promise<string> => {
+//         if (typeof token.content === "string") {
+//           return token.content
+//             .split("\n")
+//             .map((line) => line.trim())
+//             .filter((line) => line.length > 0)
+//             .join("\n");
+//         } else if (token.type === "image") {
+//           return args.values.noRenderImages
+//             ? await token.content.render()
+//             : chalk.dim(token.content.imageAlt);
+//         } else if (
+//           Array.isArray(token.content) &&
+//           !token.content.every((arr) => Array.isArray(arr))
+//         ) {
+//           if (token.type === "bullet_list") {
+//             let str = "";
+//             for (const child of token.content as ProcessedToken[]) {
+//               if (child.type !== "list_item") throw new Error("Huh?");
+//               str += `\u2022 ${await tokensToString(child.content)}\n`;
+//             }
+//             return str;
+//           } else if (token.type === "ordered_list") {
+//             let number = token.properties.start || 1;
+//             let str = "";
+//             for (const child of token.content) {
+//               const content = Array.isArray(child) ? child : child.content;
+//               str += `${number}. ${await tokensToString(content)}\n`;
+//               number++;
+//             }
+//             return str;
+//           } else if (token.type === "blockquote") {
+//             let str = "";
+//             for (const child of token.content) {
+//               if (Array.isArray(child)) continue;
+//               const blockquoteContent = await tokensToString(
+//                 isRecursing
+//                   ? [child]
+//                   : (child.content as (ProcessedToken | Image)[]),
+//                 true,
+//               );
+//               str += `\u258c ${blockquoteContent
+//                 .split("\n")
+//                 .map((line) => line.trim())
+//                 .filter((line) => line.length > 0)
+//                 .join("\n\u258c ")}\n`;
+//             }
+//             return str;
+//           } else {
+//             return await tokensToString(token.content);
+//           }
+//         } else if (
+//           typeof token.content === "object" &&
+//           "code" in token.content
+//         ) {
+//           return token.content.code;
+//         } else if (
+//           typeof token.content === "object" &&
+//           !("imageAlt" in token.content) &&
+//           token.type === "heading"
+//         ) {
+//           let str = "";
+//           const tokenContent = token.content as HeadingObject;
+//           return str;
+//         }
+//         return "";
+//       }),
+//     )
+//   ).join("\n");
+// }
 
 export async function renderMarkdown(
   tokens: ProcessedToken[],
@@ -482,10 +465,6 @@ export async function renderMarkdown(
         }
       case "paragraph":
         const content = token.content;
-        if (!Array.isArray(content))
-          throw new Error(
-            `Table token type is somehow ${typeof content} instead of an array!`,
-          );
         const paragraphBox = new BoxRenderable(ctx, { padding: 0 });
         for (const element of content) {
           if ("imageAlt" in element)
@@ -503,7 +482,6 @@ export async function renderMarkdown(
                 : ansiToTextToken(await image.render(), ctx),
             );
           } else if (element.type === "text") {
-            if (typeof element.content !== "string") throw new Error("What?");
             const parsedAnsi = ansiToTextToken(
               element.content
                 .split("\n")
@@ -913,15 +891,16 @@ if (process.platform === "win32") {
   args.values.printToStdout = true;
 }
 
-if (!process.stdin.isTTY && args.values.printToStdout) {
-  const md = await Bun.stdin.text();
-  const tokens = await stylize(parseInput(md));
-  const content = await tokensToString(tokens);
-  console.log(
-    Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
-  );
-  process.exit(0);
-}
+// TODO: uncomment when you're done with `tokensToString`
+// if (!process.stdin.isTTY && args.values.printToStdout) {
+//   const md = await Bun.stdin.text();
+//   const tokens = await stylize(parseInput(md), "");
+//   const content = await tokensToString(tokens);
+//   console.log(
+//     Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
+//   );
+//   process.exit(0);
+// }
 
 const terminalInput = process.stdin.isTTY
   ? process.stdin
@@ -962,13 +941,14 @@ if (args.positionals.length > 0) {
       throw new Error(`Encountered an error: ${err}`);
     }
   }
-  const tokens = await stylize(parseInput(fileContent));
+  const tokens = await stylize(parseInput(fileContent), filePath || "");
   if (args.values.printToStdout) {
     renderer.destroy();
-    const content = await tokensToString(tokens);
-    console.log(
-      Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
-    );
+    // TODO: uncomment when you're done with the `tokensToString` function
+    // const content = await tokensToString(tokens);
+    // console.log(
+    //   Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
+    // );
     process.exit(0);
   } else {
     const box = new ScrollBoxRenderable(renderer, {
@@ -1012,7 +992,7 @@ if (args.positionals.length > 0) {
 } else if (!process.stdin.isTTY) {
   //#region handle piped input on non-windows systems
   const md = await Bun.stdin.text();
-  const tokens = await stylize(parseInput(md));
+  const tokens = await stylize(parseInput(md), "");
   const renderables = await renderMarkdown(
     tokens as ProcessedToken[],
     renderer,
@@ -1033,10 +1013,7 @@ if (args.positionals.length > 0) {
     renderables,
   );
   box.focus();
-  const originalHandleKeyPress = box.verticalScrollBar.handleKeyPress.bind(
-    box.verticalScrollBar,
-  );
-  box.verticalScrollBar.handleKeyPress = (key) => {
+  box.onKeyDown = (key) => {
     if (key.name === "up" || key.name === "k") {
       box.scrollBy(-1, "absolute");
       return true;
@@ -1045,7 +1022,6 @@ if (args.positionals.length > 0) {
       box.scrollBy(1, "absolute");
       return true;
     }
-    return originalHandleKeyPress(key);
   };
   root.add(box);
   //#endregion

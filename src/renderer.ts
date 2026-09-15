@@ -324,7 +324,7 @@ const args = parseArgs({
   allowPositionals: true,
 });
 
-async function renderTable(tableToken: ProcessedToken) {
+async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
   const rows: TextChunk[][][] = [];
   if (tableToken.type !== "table")
     throw new Error(
@@ -341,7 +341,11 @@ async function renderTable(tableToken: ProcessedToken) {
         } else if (item.type === "image") {
           cellText += args.values.noRenderImages
             ? chalk.gray(item.content.imageAlt)
-            : await item.content.render();
+            : await item.content.render(
+              ctx,
+              root.findDescendantById("root-scrollbox")?.width || 80,
+              cell.content.length > 1,
+            );
         } else {
           throw new Error(
             `Type not recognized: expected "text" or "image" but got ${item.type}`,
@@ -467,19 +471,17 @@ export async function renderMarkdown(
         const content = token.content;
         const paragraphBox = new BoxRenderable(ctx, { padding: 0 });
         for (const element of content) {
-          if ("imageAlt" in element)
-            continue; // this shouldn't be possible?
-          else if (Array.isArray(element)) {
-          } else if (
-            element.type === "image" &&
-            typeof element.content === "object" &&
-            "imageAlt" in element.content
-          ) {
+          if (Array.isArray(element)) {
+          } else if (element.type === "image") {
             const image = element.content;
             paragraphBox.add(
               args.values.noRenderImages
                 ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
-                : ansiToTextToken(await image.render(), ctx),
+                : await image.render(
+                  ctx,
+                  root.findDescendantById("root-scrollbox")?.width || 80,
+                  content.length > 1,
+                ),
             );
           } else if (element.type === "text") {
             const parsedAnsi = ansiToTextToken(
@@ -491,11 +493,6 @@ export async function renderMarkdown(
               ctx,
             );
             paragraphBox.add(parsedAnsi);
-          } else {
-            throw new Error(
-              `Did not recognize type ${element.type}.
-               Element contents are ${Object.keys(element.content)}.`,
-            );
           }
         }
         componentArray.push(paragraphBox);
@@ -579,7 +576,7 @@ export async function renderMarkdown(
       case "table":
         componentArray.push(
           new TextTableRenderable(renderer, {
-            content: await renderTable(token),
+            content: await renderTable(ctx, token),
             maxWidth: parseInt(args.values.width) - 1,
             cellPaddingX: 1,
             columnWidthMode: "content",

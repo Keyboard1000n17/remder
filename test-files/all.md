@@ -5,10 +5,15 @@ This file is a deliberately broad GitHub Markdown test document.
 ## Headings
 
 # H1
+
 ## H2
+
 ### H3
+
 #### H4
+
 ##### H5
+
 ###### H6
 
 Setext H1
@@ -28,15 +33,11 @@ This line follows it.
 
 ## Emphasis
 
-*italic*
-_italic_
-**bold**
-__bold__
-***bold italic***
-___bold italic___
+_italic_ _italic_ **bold** **bold** _**bold italic**_ _**bold italic**_
 ~~strikethrough~~
 
-Nested: **bold with *italic* inside**, *italic with **bold** inside*, and ~~**bold strike**~~.
+Nested: **bold with _italic_ inside**, _italic with **bold** inside_, and
+~~**bold strike**~~.
 
 ## Inline code
 
@@ -56,9 +57,7 @@ https://example.com/autolink
 
 ### Reference links
 
-[GitHub][github]
-[repository][repo]
-[GitHub][]
+[GitHub][github] [repository][repo] [GitHub][]
 
 [github]: https://github.com/
 [repo]: https://github.com/Keyboard1000n17/OSPedia "OSPedia repository"
@@ -71,7 +70,9 @@ https://example.com/autolink
 
 ![Reference image][octocat]
 
-[octocat]: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png "Octocat"
+[octocat]:
+  https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
+  "Octocat"
 
 ## Blockquotes
 
@@ -98,8 +99,8 @@ https://example.com/autolink
 * Asterisk item
 * Another asterisk item
 
-+ Plus item
-+ Another plus item
+- Plus item
+- Another plus item
 
 ## Ordered lists
 
@@ -107,9 +108,9 @@ https://example.com/autolink
 2. Second
 3. Third
 
-1. These can all
-1. use the same marker
-1. in source Markdown
+4. These can all
+5. use the same marker
+6. in source Markdown
 
 7. Starts at seven
 8. Continues at eight
@@ -119,7 +120,7 @@ https://example.com/autolink
 
 - [ ] Unchecked task
 - [x] Checked task
-- [X] Uppercase checked task
+- [x] Uppercase checked task
   - [ ] Nested unchecked task
   - [x] Nested checked task
 
@@ -127,22 +128,15 @@ https://example.com/autolink
 
 ---
 
-***
+---
 
-___
+---
 
 ## Escapes
 
-\*literal asterisks\*
-\_literal underscores\_
-\# literal hash
-\[literal brackets\]
-\`literal backticks\`
-\\ literal backslash
-\> literal greater-than sign
-\+ literal plus
-\- literal hyphen
-\1. literal ordered-list-looking text
+\*literal asterisks\* \_literal underscores\_ \# literal hash \[literal
+brackets\] \`literal backticks\` \\ literal backslash \> literal greater-than
+sign \+ literal plus \- literal hyphen \1. literal ordered-list-looking text
 
 ## Fenced code blocks
 
@@ -212,31 +206,31 @@ inner fence
 
 Tilde fence:
 
-~~~python
+```python
 print("tilde fences work")
-~~~
+```
 
 ## Tables
 
-| Left | Center | Right |
-| :--- | :----: | ----: |
-| A | B | C |
-| 1 | 2 | 3 |
+| Left     | Center |                       Right |
+| :------- | :----: | --------------------------: |
+| A        |   B    |                           C |
+| 1        |   2    |                           3 |
 | **bold** | `code` | [link](https://github.com/) |
 
 Minimal table:
 
-| A | B |
-|---|---|
-| 1 | 2 |
-| 3 | 4 |
+| A   | B   |
+| --- | --- |
+| 1   | 2   |
+| 3   | 4   |
 
 Escaped pipe:
 
-| Expression | Meaning |
-|---|---|
-| `a \| b` | A literal pipe |
-| A \| B | A literal pipe in source |
+| Expression | Meaning                  |
+| ---------- | ------------------------ |
+| `a \| b`   | A literal pipe           |
+| A \| B     | A literal pipe in source |
 
 ## Emoji
 
@@ -254,7 +248,8 @@ The same footnote can be reused.[^one]
 
 [^one]: A simple footnote.
 
-[^note]: A footnote containing **bold**, `code`, and a [link](https://github.com/).
+[^note]:
+    A footnote containing **bold**, `code`, and a [link](https://github.com/).
 
 ## HTML blocks
 
@@ -296,20 +291,15 @@ A manual line break<br>inside HTML.
 
 ## GitHub alerts
 
-> [!NOTE]
-> Useful information for the reader.
+> [!NOTE] Useful information for the reader.
 
-> [!TIP]
-> A helpful suggestion.
+> [!TIP] A helpful suggestion.
 
-> [!IMPORTANT]
-> Important information.
+> [!IMPORTANT] Important information.
 
-> [!WARNING]
-> Warning information.
+> [!WARNING] Warning information.
 
-> [!CAUTION]
-> Something that could cause an unwanted result.
+> [!CAUTION] Something that could cause an unwanted result.
 
 ## Math
 
@@ -350,7 +340,10 @@ sequenceDiagram
 ```geojson
 {
   "type": "Point",
-  "coordinates": [51.5310, 25.2854]
+  "coordinates": [
+    51.5310,
+    25.2854
+  ]
 }
 ```
 
@@ -373,7 +366,7 @@ endsolid triangle
 ## Mixed nesting
 
 1. **Bold list item**
-   - *Italic nested item*
+   - _Italic nested item_
    - `inline code`
    - [a link](https://github.com/)
    - > nested quote
@@ -382,16 +375,20 @@ endsolid triangle
 
 ## Long wrapping paragraph
 
-GitHub-Flavored Markdown supports a large collection of Markdown constructs and GitHub extensions. This deliberately long paragraph exists to test terminal wrapping, reflow, scrolling, line measurement, and interaction with inline markup such as **bold**, *italic*, `code`, [links](https://github.com/), and emoji :rocket: across narrow and wide terminal sizes.
+GitHub-Flavored Markdown supports a large collection of Markdown constructs and
+GitHub extensions. This deliberately long paragraph exists to test terminal
+wrapping, reflow, scrolling, line measurement, and interaction with inline
+markup such as **bold**, _italic_, `code`, [links](https://github.com/), and
+emoji :rocket: across narrow and wide terminal sizes.
 
 ## Weird-but-valid inline combinations
 
-***bold italic***, **_bold italic_**, _**italic bold**_, ~~**bold strike**~~, `code` [link](https://github.com/) and <kbd>key</kbd>.
+_**bold italic**_, **_bold italic_**, _**italic bold**_, ~~**bold strike**~~,
+`code` [link](https://github.com/) and <kbd>key</kbd>.
 
 ## Everything together
 
-> [!TIP]
-> A compact integration test:
+> [!TIP] A compact integration test:
 >
 > - [x] **Parse** the source
 > - [ ] Render the table

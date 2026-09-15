@@ -6,14 +6,14 @@ import { Resvg } from "@resvg/resvg-js";
 import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
 import { join } from "path";
+import {
+  ImageRenderable,
+  TextRenderable,
+  type RenderContext,
+} from "@opentui/core";
 
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
-type TerminalImageOpts = {
-  preferNativeRender?: boolean;
-  width?: string | number;
-  height?: string | number;
-};
 type Handler = (
   token: Token[],
   filePath: string,
@@ -191,19 +191,16 @@ export class Image {
     public path: string,
     public filePath: string,
     public imageAlt: string,
-    public opts: object,
   ) {
     this.imageBuffer = null;
     this.type = "image";
     this.properties = {};
   }
-  static async create(
-    path: string,
-    filePath: string,
-    imageAlt: string,
-    opts: object,
-  ) {
-    const image = new Image(path, filePath, imageAlt, opts);
+  static preferNativeRender = !/tmux|screen|^xterm$|alacritty/.test(
+    process.env.TERM || "",
+  );
+  static async create(path: string, filePath: string, imageAlt: string) {
+    const image = new Image(path, filePath, imageAlt);
     image.imageBuffer = await Image.#getBuffer(filePath, path);
     return image;
   }
@@ -216,43 +213,31 @@ export class Image {
       return null;
     }
   }
-  async render() {
-    const path = this.path;
+  async render(
+    ctx: RenderContext,
+    parentWidth: number,
+    makeOneRowHigh: boolean,
+  ) {
     const buffer = this.imageBuffer;
-    if (!buffer) return Chalk.dim(this.imageAlt);
-    let rendered = "";
-    if (path.match(/\.svg$/)) {
-      console.log(buffer);
-      try {
-        rendered = await terminalImage.buffer(
-          new Resvg(Buffer.from(buffer)).render().asPng(),
-          this.opts,
-        );
-      } catch (err) {
-        console.error(err);
-        rendered = Chalk.dim(this.imageAlt);
-      }
-    } else if (path.match(/\.webp$/)) {
-      rendered = await terminalImage.buffer(
-        await new Bun.Image(buffer).png().buffer(),
-        this.opts,
-      );
-    } else {
-      rendered = await terminalImage.buffer(buffer, this.opts);
+    if (!buffer) {
+      console.log("buffer was not rendered");
+      return new TextRenderable(ctx, { content: this.imageAlt, fg: "gray" });
     }
-    return rendered;
+    const getImageSize = (await import("image-size")).imageSize;
+    const imageSize = getImageSize(buffer);
+    const width = 0.5 * parentWidth;
+    const height = makeOneRowHigh
+      ? 1
+      : ((imageSize.width / imageSize.height) * width) / 2;
+    return new ImageRenderable(ctx, {
+      source: buffer,
+      width,
+      height,
+    });
   }
 }
 
-const term: string | undefined = process.env.TERM;
-if (term === undefined)
-  throw new Error(`A TUI can not be run in the background!`);
-
-async function image(
-  token: Token,
-  filePath: string,
-  areThereOtherTokens: boolean,
-) {
+async function image(token: Token, filePath: string) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
     throw new Error(
@@ -260,16 +245,11 @@ async function image(
     );
   const path = token.attrGet("src");
   if (!path) throw new Error("Something went wrong, this shouldn't happen!");
-  const alt = token.attrGet("alt") || "";
-  const terminalImageOpts: TerminalImageOpts = {
-    preferNativeRender: !/tmux|screen|xterm|alacritty/.test(term!),
-  };
-  if (areThereOtherTokens) {
-    terminalImageOpts.height = token.attrGet("height") || 1;
-  } else {
-    terminalImageOpts.width = token.attrGet("width") || "50%";
-  }
-  return new Image(String(path), filePath, String(alt), terminalImageOpts);
+  const alt =
+    token.attrGet("alt") ||
+    token.children?.[0]?.content ||
+    "No alt text provided";
+  return Image.create(String(path), filePath, String(alt));
 }
 
 const inline: Record<string, (text: string) => string> = {
@@ -343,10 +323,10 @@ async function renderInline(token: Token, filePath?: string) {
         //#region images
         styled.push({ type: "text", content: text, properties: {} });
         text = "";
-        const areThereOtherTokens = token.children.length > 1;
+        console.log(token.children.length);
         styled.push({
           type: "image",
-          content: await image(child, filePath || "", areThereOtherTokens),
+          content: await image(child, filePath || ""),
           properties: {},
         } as ProcessedToken);
         //#endregion
@@ -670,10 +650,6 @@ function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
             content: removeWhitespaceTokens(token.content),
           };
         case "text":
-          if (typeof token.content !== "string")
-            throw new Error(
-              `Token content was somehow ${JSON.stringify(token.content, null, 2)} instead of string`,
-            );
           return {
             ...token,
             content: token.content.trim(),

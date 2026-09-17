@@ -339,13 +339,15 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
           cellText +=
             rows.length === 0 ? chalk.bold(item.content) : item.content;
         } else if (item.type === "image") {
-          cellText += args.values.noRenderImages
-            ? chalk.gray(item.content.imageAlt)
-            : await item.content.render(
-              ctx,
-              root.findDescendantById("root-scrollbox")?.width || 80,
-              cell.content.length > 1,
-            );
+          if ((cellText += args.values.noRenderImages)) {
+            cellText += chalk.gray(item.content.imageAlt);
+            continue;
+          }
+          // await item.content.load(
+          //   ctx,
+          //   root.findDescendantById("root-scrollbox")?.width || 80,
+          //   cell.content.length > 1,
+          // );
         } else {
           throw new Error(
             `Type not recognized: expected "text" or "image" but got ${item.type}`,
@@ -477,7 +479,7 @@ export async function renderMarkdown(
             paragraphBox.add(
               args.values.noRenderImages
                 ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
-                : await image.render(
+                : image.load(
                   ctx,
                   root.findDescendantById("root-scrollbox")?.width || 80,
                   content.length > 1,
@@ -512,7 +514,7 @@ export async function renderMarkdown(
             3: (str: string) => chalk.bold.cyan(str),
             4: (str: string) => chalk.bold.hex("#ffa5a5")(str),
             5: (str: string) => chalk.bold.green(str),
-            6: (str: string) => chalk.bold.hex("#aaa")(str),
+            6: (str: string) => chalk.bold.hex("#aaaaaa")(str),
           };
           str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
@@ -939,6 +941,7 @@ if (args.positionals.length > 0) {
     }
   }
   const tokens = await stylize(parseInput(fileContent), filePath || "");
+  console.log(filePath);
   if (args.values.printToStdout) {
     renderer.destroy();
     // TODO: uncomment when you're done with the `tokensToString` function

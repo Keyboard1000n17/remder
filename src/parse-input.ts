@@ -71,7 +71,7 @@ const htmlToTokens: Token[] = []; // the htmlParser pushes to this array
 
 const htmlParser = new Parser({
   onopentag(name: string, attributes) {
-    const openingToken = new TokenClass("", name, 1);
+    const openingToken = new TokenClass("", name, name === "img" ? 0 : 1);
     const isTagDisallowed = name.match(
       /title|textarea|style|xmp|iframe|noembed|noframes|script|plaintext/,
     );

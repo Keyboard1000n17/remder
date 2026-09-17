@@ -5,12 +5,16 @@ import got from "got";
 import { Resvg } from "@resvg/resvg-js";
 import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
-import { join } from "path";
+import { join, dirname, isAbsolute } from "path";
 import {
+  Box,
+  BoxRenderable,
   ImageRenderable,
+  StyledText,
   TextRenderable,
   type RenderContext,
 } from "@opentui/core";
+import { randomUUID } from "crypto";
 
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
@@ -184,56 +188,130 @@ const enum FontStyle {
 let state: StateEntry[] = []; // global var
 
 export class Image {
-  public imageBuffer: Uint8Array<ArrayBuffer> | null;
+  public imageBuffer: Promise<Uint8Array<ArrayBuffer> | undefined>;
   public type: "image";
   public properties: {};
+  private id: `${string}-${string}-${string}-${string}-${string}`;
+  private loadState: "not loaded" | "loading" | "loaded";
+  public static frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  public static frame = 0;
   constructor(
     public path: string,
     public filePath: string,
     public imageAlt: string,
   ) {
-    this.imageBuffer = null;
+    this.imageBuffer = Image.#getBuffer(filePath, path);
     this.type = "image";
     this.properties = {};
+    this.id = randomUUID();
+    this.loadState = "not loaded";
   }
   static preferNativeRender = !/tmux|screen|^xterm$|alacritty/.test(
     process.env.TERM || "",
   );
-  static async create(path: string, filePath: string, imageAlt: string) {
-    const image = new Image(path, filePath, imageAlt);
-    image.imageBuffer = await Image.#getBuffer(filePath, path);
-    return image;
-  }
   static async #getBuffer(filePath: string, path: string) {
+    console.log("path:", path);
+    console.log(isAbsolute(path));
     try {
       return URL.canParse(path)
-        ? (await got(path)).rawBody
-        : await Bun.file(join(filePath, path)).bytes();
+        ? (await got(path, { retry: { limit: 2 } })).rawBody
+        : await Bun.file(
+          isAbsolute(path) ? path : join(dirname(filePath), path),
+        ).bytes();
     } catch (err) {
-      return null;
+      console.error(err);
+      return undefined;
     }
   }
-  async render(
+  async #finishLoad(
     ctx: RenderContext,
+    wrapper: BoxRenderable,
+    spinner: TextRenderable,
+    spinnerLoop: ReturnType<typeof setInterval>,
     parentWidth: number,
     makeOneRowHigh: boolean,
   ) {
-    const buffer = this.imageBuffer;
-    if (!buffer) {
-      console.log("buffer was not rendered");
-      return new TextRenderable(ctx, { content: this.imageAlt, fg: "gray" });
+    const tempBuf = await this.imageBuffer!;
+    if (tempBuf === undefined) {
+      this.loadState = "loaded";
+      spinner.visible = false;
+      wrapper.remove(spinner);
+      return;
     }
-    const getImageSize = (await import("image-size")).imageSize;
-    const imageSize = getImageSize(buffer);
-    const width = 0.5 * parentWidth;
-    const height = makeOneRowHigh
-      ? 1
-      : ((imageSize.width / imageSize.height) * width) / 2;
-    return new ImageRenderable(ctx, {
-      source: buffer,
-      width,
-      height,
+    const buf = this.path.endsWith(".svg")
+      ? new Resvg(Buffer.from(tempBuf!), {
+        fitTo: {
+          mode: "width",
+          value:
+            0.5 *
+            parentWidth *
+            (ctx.resolution?.width
+              ? ctx.resolution?.width / (ctx.terminalWidth ?? 80)
+              : 8),
+        },
+        shapeRendering: 2,
+      })
+        .render()
+        .asPng()
+      : tempBuf;
+    const imageRenderable = new ImageRenderable(ctx, {
+      source: buf,
+      id: `${this.id}__image`,
+      padding: 0,
+      margin: 0,
+      onLoad: async () => {
+        clearInterval(spinnerLoop);
+        const getImageSize = (await import("image-size")).imageSize;
+        const imageSize = getImageSize(buf!);
+        const width = 0.5 * parentWidth;
+        const height = makeOneRowHigh
+          ? 1
+          : width /
+          ((imageSize.width / imageSize.height) *
+            imageRenderable.cellAspectRatio);
+        imageRenderable.width = width;
+        imageRenderable.height = height;
+        spinner.visible = false;
+        wrapper.remove(spinner);
+        this.loadState = "loaded";
+      },
+      onError: (err) => {
+        clearInterval(spinnerLoop);
+        console.error(`Caught error: ${err}`);
+        wrapper.add(
+          new TextRenderable(ctx, {
+            content: `\u{f082b} ${this.imageAlt}`,
+            fg: "gray",
+          }),
+        );
+        spinner.visible = false;
+        wrapper.remove(spinner);
+        this.loadState = "loaded";
+      },
     });
+    wrapper.add(imageRenderable);
+    return;
+  }
+  load(ctx: RenderContext, parentWidth: number, makeOneRowHigh: boolean) {
+    if (this.loadState === "loaded" || this.loadState === "loading") return;
+    this.loadState = "loading";
+    const wrapper = new BoxRenderable(ctx, {});
+    const frames = Image.frames;
+    const spinner = new TextRenderable(ctx, {
+      content: `${frames[0]} Loading`,
+      id: `${this.id}__spinner`,
+    });
+    const spinnerLoop = setInterval(() => {
+      Image.frame = (Image.frame + 1) % frames.length;
+      spinner.content = new StyledText([
+        { text: `${frames[Image.frame]!} Loading`, __isChunk: true },
+      ]);
+    }, 80);
+    wrapper.add(spinner);
+    this.#finishLoad(
+      ...[ctx, wrapper, spinner, spinnerLoop, parentWidth, makeOneRowHigh],
+    );
+    return wrapper;
   }
 }
 
@@ -249,7 +327,7 @@ async function image(token: Token, filePath: string) {
     token.attrGet("alt") ||
     token.children?.[0]?.content ||
     "No alt text provided";
-  return Image.create(String(path), filePath, String(alt));
+  return new Image(String(path), filePath, String(alt));
 }
 
 const inline: Record<string, (text: string) => string> = {

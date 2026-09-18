@@ -9,10 +9,14 @@ import { join, dirname, isAbsolute } from "path";
 import {
   Box,
   BoxRenderable,
+  createTextAttributes,
   ImageRenderable,
+  link,
+  RGBA,
   StyledText,
   TextRenderable,
   type RenderContext,
+  type TextChunk,
 } from "@opentui/core";
 import { randomUUID } from "crypto";
 
@@ -78,7 +82,7 @@ interface ImageToken extends BaseProcessedToken {
 
 interface TextToken extends BaseProcessedToken {
   type: "text";
-  content: string;
+  content: StyledText;
 }
 
 interface ParagraphToken extends BaseProcessedToken {
@@ -210,8 +214,11 @@ export class Image {
     process.env.TERM || "",
   );
   static async #getBuffer(filePath: string, path: string) {
-    console.log("path:", path);
-    console.log(isAbsolute(path));
+    console.log("path: " + path + " | " + "absolute?: " + isAbsolute(path));
+    console.log(
+      "tried to access",
+      isAbsolute(path) ? path : join(dirname(filePath), path),
+    );
     try {
       return URL.canParse(path)
         ? (await got(path, { retry: { limit: 2 } })).rawBody
@@ -238,22 +245,26 @@ export class Image {
       wrapper.remove(spinner);
       return;
     }
-    const buf = this.path.endsWith(".svg")
-      ? new Resvg(Buffer.from(tempBuf!), {
-        fitTo: {
-          mode: "width",
-          value:
-            0.5 *
-            parentWidth *
-            (ctx.resolution?.width
-              ? ctx.resolution?.width / (ctx.terminalWidth ?? 80)
-              : 8),
-        },
-        shapeRendering: 2,
-      })
-        .render()
-        .asPng()
-      : tempBuf;
+    const getImageSize = (await import("image-size")).imageSize;
+    const imageSize = getImageSize(tempBuf!);
+    console.log("image type?:", imageSize.type === "svg");
+    const buf =
+      imageSize.type === "svg"
+        ? new Resvg(Buffer.from(tempBuf!), {
+          fitTo: {
+            mode: "width",
+            value:
+              0.5 *
+              parentWidth *
+              (ctx.resolution?.width
+                ? ctx.resolution?.width / (ctx.terminalWidth ?? 80)
+                : 8),
+          },
+          shapeRendering: 2,
+        })
+          .render()
+          .asPng()
+        : tempBuf;
     const imageRenderable = new ImageRenderable(ctx, {
       source: buf,
       id: `${this.id}__image`,
@@ -261,8 +272,6 @@ export class Image {
       margin: 0,
       onLoad: async () => {
         clearInterval(spinnerLoop);
-        const getImageSize = (await import("image-size")).imageSize;
-        const imageSize = getImageSize(buf!);
         const width = 0.5 * parentWidth;
         const height = makeOneRowHigh
           ? 1
@@ -345,112 +354,121 @@ const inline: Record<string, (text: string) => string> = {
 
 async function renderInline(token: Token, filePath?: string) {
   const styled: ProcessedToken[] = [];
+  const tempChunks: TextChunk[] = [];
   if (token.type === "inline") {
     state.push("inline");
-    let i = 0;
-    let text = "";
     if (!token.children)
       throw new Error(`Something went wrong. This shouldn't happen.`);
-    // if this error ever happens, my first thought will be "how the fuck did that happen"
-    while (i < token.children.length) {
+    const styleAliases: Record<string, string> = {
+      strong: "bold",
+      em: "italic",
+      s: "strikethrough",
+      del: "strikethrough",
+      ins: "underline",
+      u: "underline",
+      code: "code",
+    };
+    const getStyles = () =>
+      state
+        .slice(state.indexOf("inline") + 1)
+        .map((style) => styleAliases[style] ?? style)
+        .filter((style) => style !== "br");
+    const pushText = (content: string) => {
+      if (content === "") return;
+      const attrs = createTextAttributes(
+        Object.fromEntries(getStyles().map((style) => [style, true])),
+      );
+      tempChunks.push({
+        __isChunk: true,
+        text: content,
+        attributes: attrs,
+      });
+    };
+    for (let i = 0; i < token.children.length; i++) {
       const child = token.children[i];
       if (!child)
         throw new Error(`Something went wrong. This shouldn't happen.`);
       const type = child.type;
       if (type === "link_open") {
         //#region links
-        const linkUrl = child.attrGet("href") ?? "";
+        state.push("link");
+        const linkUrl = (child.attrGet("href") as string) ?? "";
         i++;
         const linkTextToken = token.children[i];
         if (!linkTextToken)
-          throw new Error(
-            Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-          );
-        const linkText = linkTextToken.content;
-        text += Chalk.underline(terminalLink(linkText, String(linkUrl)));
+          throw new Error(`Something went wrong. This shouldn't happen.`);
+        tempChunks.push({
+          __isChunk: true,
+          text: linkTextToken.content,
+          fg: RGBA.fromHex("#8af"),
+          link: { url: linkUrl },
+          attributes: createTextAttributes({ underline: true }),
+        });
         //#endregion
       } else if (type === "abbr_open") {
         //#region abbreviations
+        state.push("abbreviation");
         const abbreviation = String(child.attrGet("title"));
         i++;
         const abbrTextToken = token.children[i];
         if (!abbrTextToken)
-          throw new Error(
-            Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-          );
+          throw new Error(`Something went wrong. This shouldn't happen.`);
         const abbreviatedText = abbrTextToken.content ?? "";
-        if (abbreviation && abbreviation.length > 0) {
-          text += `${abbreviatedText} (${abbreviation})`;
-        } else {
-          text += abbreviatedText;
-        }
-        text +=
+        pushText(
           abbreviation && abbreviation.length > 0
             ? `${abbreviatedText} (${abbreviation})`
-            : abbreviatedText;
+            : abbreviatedText,
+        );
         //#endregion
-      } else if (/_open/.test(type)) {
-        //#region
-        state.push(type.split("_")[0]!);
-        //#endregion
-      } else if (/_close/.test(type)) {
-        //#region
+      } else if (type === "br_open") {
+        pushText("\n");
+      } else if (/_open$/.test(type)) {
+        state.push(type.slice(0, -5));
+      } else if (/_close$/.test(type)) {
         state.pop();
-        //#endregion
       } else if (type === "image") {
-        //#region images
-        styled.push({ type: "text", content: text, properties: {} });
-        text = "";
-        console.log(token.children.length);
+        if (tempChunks.length > 0) {
+          styled.push({
+            type: "text",
+            content: new StyledText([...tempChunks]),
+            properties: {},
+          });
+        }
+        tempChunks.splice(0);
         styled.push({
           type: "image",
           content: await image(child, filePath || ""),
           properties: {},
         } as ProcessedToken);
-        //#endregion
+        tempChunks.splice(0);
       } else if (type === "softbreak") {
-        //#region softbreaks
-        text += " ";
-        //#endregion
+        tempChunks.at(-1)!.text += " ";
       } else if (type === "hardbreak") {
-        //#region hardbreaks
-        text += "\n\n";
-        //#endregion
+        tempChunks.at(-1)!.text += "\n\n";
       } else if (type === "code_inline") {
-        //#region inline code
-        text += inline.code!(` ${child.content} `);
-        //#endregion
+        tempChunks.push({
+          __isChunk: true,
+          text: ` ${child.content} `,
+          bg: RGBA.fromHex("#808080"),
+        });
       } else if (type === "emoji") {
-        text += child.content;
+        pushText(child.content);
       } else if (type === "text") {
-        //#region text
-        const nesting = state.slice(state.indexOf("inline") + 1);
-        let temp = child.content;
-        for (const style of nesting) {
-          const handler = inline[style];
-          if (handler) {
-            temp = handler(temp);
-          } else {
-            temp += `\n`;
-          }
-        }
-        text += temp;
-        //#endregion
+        pushText(child.content);
       } else {
-        //#region
         handleTokens.default!([child], filePath || "");
-        //#endregion
       }
-      i++;
     }
-    if (text !== "")
-      styled.push({
-        type: "text",
-        content: text,
-        properties: {},
-      } as ProcessedToken);
+    state.pop();
   }
-  state.pop();
+  if (tempChunks.length > 0) {
+    styled.push({
+      type: "text",
+      content: new StyledText([...tempChunks]),
+      properties: {},
+    });
+  }
+  tempChunks.splice(0);
   return styled;
 }
 
@@ -728,17 +746,17 @@ function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
             content: removeWhitespaceTokens(token.content),
           };
         case "text":
-          return {
-            ...token,
-            content: token.content.trim(),
-          };
+          token.content.chunks = token.content.chunks.filter(
+            (chunk) => chunk.text.trim().length > 0,
+          );
+          return token;
         default:
           return token;
       }
     })
     .filter((token) => {
       if (token.type === "text") {
-        return token.content !== "";
+        return token.content.chunks.length > 0;
       }
       if (Array.isArray(token.content)) {
         return token.content.length > 0;
@@ -812,19 +830,23 @@ export default async function stylize(
               parseInt(token.tag.split("")[1]!),
             )
             : await handler(accumulatedTokens, filePath);
-        const unknownTagString: ProcessedToken = {
-          type: "paragraph",
-          content: [
-            {
-              type: "text",
-              content: accumulatedTokenContentString,
-              properties: {},
-            },
-          ],
-          properties: {},
-        };
-        output.push(unknownTagString);
-        accumulatedTokenContentString = "";
+        if (accumulatedTokenContentString.length > 0) {
+          const unknownTagString: ProcessedToken = {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                content: new StyledText([
+                  { __isChunk: true, text: accumulatedTokenContentString },
+                ]),
+                properties: {},
+              },
+            ],
+            properties: {},
+          };
+          output.push(unknownTagString);
+          accumulatedTokenContentString = "";
+        }
       } else if (accumulatedTokens.length > 0) {
         await handleTokens.default!(accumulatedTokens, filePath);
       }

@@ -257,16 +257,22 @@ function makeTaskList(item: ProcessedToken) {
       case "paragraph":
         child.content.forEach((text) => {
           if (text.type === "text") {
-            const startsWith = text.content.match(/^\[[ xX]\]\s*/);
+            const startsWith =
+              text.content.chunks[0]?.text.match(/^\[[ xX]\]\s*/);
             const replace = (text: string, toReplace: string) =>
               toReplace.trim().toLowerCase() === "[x]"
                 ? text.replace(toReplace, chalk.bgGray(" \uf00c ") + " ")
                 : text.replace("[ ]", chalk.bgGray("   "));
+
+            if (startsWith?.[0]) {
+              text.content.chunks[0]!.text = replace(
+                text.content.chunks[0]?.text!,
+                startsWith[0],
+              );
+            }
             content.push({
               ...text,
-              content: startsWith?.[0]
-                ? replace(text.content, startsWith[0])
-                : text.content,
+              content: text.content,
             });
           } else {
             content.push(text);
@@ -454,27 +460,15 @@ export async function renderMarkdown(
     //#region switch token type
     switch (token.type) {
       //#region paragraph/text
-      // @ts-expect-error - intentional fallthrough
       case "text":
-        if (typeof token.content === "string") {
-          componentArray.push(
-            ansiToTextToken(
-              token.content
-                .trim()
-                .split("\n")
-                .map((line) => line.trim())
-                .join("\n"),
-              ctx,
-            ),
-          );
-          break;
-        }
-      case "paragraph":
+        const content = token.content;
+        componentArray.push(new TextRenderable(ctx, { content }));
+        break;
+      case "paragraph": {
         const content = token.content;
         const paragraphBox = new BoxRenderable(ctx, { padding: 0 });
         for (const element of content) {
-          if (Array.isArray(element)) {
-          } else if (element.type === "image") {
+          if (element.type === "image") {
             const image = element.content;
             paragraphBox.add(
               args.values.noRenderImages
@@ -486,19 +480,14 @@ export async function renderMarkdown(
                 ),
             );
           } else if (element.type === "text") {
-            const parsedAnsi = ansiToTextToken(
-              element.content
-                .split("\n")
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0)
-                .join("\n"),
-              ctx,
+            paragraphBox.add(
+              new TextRenderable(ctx, { content: element.content }),
             );
-            paragraphBox.add(parsedAnsi);
           }
         }
         componentArray.push(paragraphBox);
         break;
+      }
       //#endregion
       //#region heading
       case "heading":
@@ -591,7 +580,7 @@ export async function renderMarkdown(
       case "bullet_list":
         const bp = "\u2022";
         const bulletListbox = new BoxRenderable(ctx, {});
-        for (const listItem of token.content as ProcessedToken[]) {
+        for (const listItem of token.content) {
           if (listItem.type !== "list_item")
             throw new Error(
               `Expected type "list_item" but got ${listItem.type}`,
@@ -602,10 +591,7 @@ export async function renderMarkdown(
             );
           const transformedListItem = makeTaskList(listItem);
           const listContent = transformedListItem.content;
-          const listRenderables = await renderMarkdown(
-            listContent.flat() as ProcessedToken[],
-            ctx,
-          );
+          const listRenderables = await renderMarkdown(listContent.flat(), ctx);
           for (const listRenderable of listRenderables) {
             bulletListbox.add(
               Box(
@@ -850,7 +836,8 @@ export async function renderMarkdown(
       //#endregion
       //#region default
       default:
-        console.log("DEFAULT CASE:", token);
+        console.warn("DEFAULT CASE:", token);
+        console.warn("args in current renderMarkdown() call:", tokens.length);
         componentArray.push(ansiToTextToken(String(token.content), ctx));
       //#endregion
     }

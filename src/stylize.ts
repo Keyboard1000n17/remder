@@ -15,6 +15,7 @@ import {
   RGBA,
   StyledText,
   TextRenderable,
+  type AlignString,
   type RenderContext,
   type TextChunk,
 } from "@opentui/core";
@@ -203,6 +204,7 @@ export class Image {
     public path: string,
     public filePath: string,
     public imageAlt: string,
+    public token: Token,
   ) {
     this.imageBuffer = Image.#getBuffer(filePath, path);
     this.type = "image";
@@ -327,16 +329,13 @@ export class Image {
 async function image(token: Token, filePath: string) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
-    throw new Error(
-      Chalk.red.bold(`Wrong token type: expected image but got ${token.type}`),
-    );
+    throw new Error(`Wrong token type: expected image but got ${token.type}`);
   const path = token.attrGet("src");
-  if (!path) throw new Error("Something went wrong, this shouldn't happen!");
-  const alt =
-    token.attrGet("alt") ||
-    token.children?.[0]?.content ||
-    "No alt text provided";
-  return new Image(String(path), filePath, String(alt));
+  if (typeof path !== "string")
+    throw new Error("Something went wrong, this shouldn't happen!");
+  const alt = token.attrGet("alt") ?? token.children?.[0]?.content;
+  ("No alt text provided");
+  return new Image(String(path), filePath, String(alt), token);
 }
 
 const inline: Record<string, (text: string) => string> = {

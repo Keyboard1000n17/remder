@@ -462,11 +462,19 @@ export async function renderMarkdown(
       //#region paragraph/text
       case "text":
         const content = token.content;
-        componentArray.push(new TextRenderable(ctx, { content }));
+        componentArray.push(
+          new TextRenderable(ctx, {
+            content,
+            alignSelf: token.properties.align ?? "left",
+          }),
+        );
         break;
       case "paragraph": {
         const content = token.content;
-        const paragraphBox = new BoxRenderable(ctx, { padding: 0 });
+        const paragraphBox = new BoxRenderable(ctx, {
+          padding: 0,
+          alignItems: token.properties.align ?? "left",
+        });
         for (const element of content) {
           if (element.type === "image") {
             const image = element.content;
@@ -520,6 +528,7 @@ export async function renderMarkdown(
             componentArray.push(
               new TextRenderable(ctx, {
                 content: new StyledText(linksArray),
+                alignSelf: token.properties.align ?? "left",
               }),
             );
           }
@@ -542,6 +551,7 @@ export async function renderMarkdown(
           id: headingId,
           flexDirection: "row",
           flexWrap: "wrap",
+          alignSelf: token.properties.align ?? "left",
         });
         (await makeFigletFont(tokenContent.text, tokenContent.level)).forEach(
           (char) => heading.add(Text({ content: char, flexShrink: 0 })),
@@ -552,6 +562,7 @@ export async function renderMarkdown(
           componentArray.push(
             new TextRenderable(ctx, {
               content: new StyledText(linksArray),
+              alignSelf: token.properties.align ?? "left",
             }),
           );
         }
@@ -579,7 +590,9 @@ export async function renderMarkdown(
       //#region bullet list
       case "bullet_list":
         const bp = "\u2022";
-        const bulletListbox = new BoxRenderable(ctx, {});
+        const bulletListbox = new BoxRenderable(ctx, {
+          alignItems: token.properties.align ?? "left",
+        });
         for (const listItem of token.content) {
           if (listItem.type !== "list_item")
             throw new Error(
@@ -611,7 +624,10 @@ export async function renderMarkdown(
       //#region ordered list
       case "ordered_list":
         let number = token.properties.start || 1;
-        const orderedListBox = new BoxRenderable(ctx, {});
+        const orderedListBox = new BoxRenderable(ctx, {
+          alignSelf: token.properties.align ?? "left",
+          alignItems: token.properties.align ?? "left",
+        });
         for (const listItem of token.content as ProcessedToken[]) {
           if (listItem.type !== "list_item")
             throw new Error(
@@ -643,7 +659,10 @@ export async function renderMarkdown(
       //#region blockquote
       case "blockquote":
         const uhb = "\u258c"; // unicode left half block
-        const blockquoteBox = new BoxRenderable(ctx, {});
+        const blockquoteBox = new BoxRenderable(ctx, {
+          alignItems: token.properties.align ?? "left",
+          alignSelf: token.properties.align ?? "left",
+        });
         const blockquoteRenderables = await renderMarkdown(
           token.content as ProcessedToken[],
           ctx,
@@ -760,6 +779,8 @@ export async function renderMarkdown(
         const divBox = new BoxRenderable(ctx, {
           flexDirection: "column",
           width: "100%",
+          alignSelf: token.properties.align ?? "left",
+          alignItems: token.properties.align ?? "left",
         });
         const divBoxRenderables = await renderMarkdown(
           token.content as ProcessedToken[],
@@ -779,7 +800,12 @@ export async function renderMarkdown(
           attributes: createTextAttributes({ bold: true }),
         });
         const detailsBox = Box(
-          { id: "details-element", visible: false },
+          {
+            id: `details-element-${detailsId}`,
+            visible: false,
+            alignSelf: token.properties.align ?? "left",
+            alignItems: token.properties.align ?? "left",
+          },
           await renderMarkdown(
             detailsContent[1]?.content as ProcessedToken[],
             ctx,

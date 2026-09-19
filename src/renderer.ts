@@ -21,6 +21,7 @@ import {
   Renderable,
   TextRenderable,
   type RenderContext,
+  type BorderSides,
 } from "@opentui/core";
 import { parseArgs } from "node:util";
 import got from "got";
@@ -331,44 +332,125 @@ const args = parseArgs({
 });
 
 async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
-  const rows: TextChunk[][][] = [];
   if (tableToken.type !== "table")
     throw new Error(
       `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
     );
-  for (const row of tableToken.content) {
-    const cells: TextChunk[][] = [];
-    for (const cell of row) {
+  const table = new BoxRenderable(ctx, {
+    width: "100%",
+    gap: 0,
+  });
+  const maxCellWidth = Math.round(
+    ((ctx.terminalWidth ?? 80) - 2) /
+    Math.max(...tableToken.content.map((arr) => arr.length)),
+  );
+  const maxCellContentWidth =
+    Math.max(
+      ...tableToken.content.flatMap((row) =>
+        row.flatMap((cell) =>
+          cell.content
+            .filter((token) => token.type === "text")
+            .flatMap((token) =>
+              token.content.chunks.map((chunk) => Bun.stringWidth(chunk.text)),
+            ),
+        ),
+      ),
+    ) + 3;
+  let cellWidth = Math.min(maxCellWidth, maxCellContentWidth);
+  console.log(cellWidth);
+  for (let rowIndex = 0; rowIndex < tableToken.content.length; rowIndex++) {
+    const row = tableToken.content[rowIndex]!;
+    const isFirstRow = rowIndex === 0;
+    const isLastRow = rowIndex === tableToken.content.length - 1;
+    const rowRenderable = new BoxRenderable(ctx, {
+      width: "100%",
+      gap: 0,
+      flexDirection: "row",
+      flexWrap: "no-wrap",
+    });
+    for (let cellIndex = 0; cellIndex < row.length; cellIndex++) {
+      const cell = row[cellIndex]!;
+      const isFirstColumn = cellIndex === 0;
+      const isLastColumn = cellIndex === row.length - 1;
+      const borders: BorderSides[] = [
+        "bottom",
+        "right",
+        ...(isFirstRow ? ["top" as const] : []),
+        ...(isFirstColumn ? ["left" as const] : []),
+      ];
+      const cellRenderable = new BoxRenderable(ctx, {
+        alignItems: cell.properties.textAlign,
+        border: borders,
+        width: cellWidth,
+        flexShrink: 1,
+        paddingX: 1,
+        customBorderChars: {
+          topLeft: isFirstRow && isFirstColumn ? "╭" : "┼",
+          topRight: isFirstRow ? (isLastColumn ? "╮" : "┬") : "┼",
+          bottomLeft: isLastRow ? "╰" : "├",
+          bottomRight: isLastRow
+            ? isLastColumn
+              ? "╯"
+              : "┴"
+            : isLastColumn
+              ? "┤"
+              : "┼",
+          horizontal: "─",
+          vertical: "│",
+          topT: isFirstRow ? "┬" : "┼",
+          bottomT: isLastRow ? "┴" : "┼",
+          leftT: "├",
+          rightT: "┤",
+          cross: " ",
+        },
+      });
       for (const item of cell.content) {
-        let cellText = "";
         if (item.type === "text") {
-          cellText +=
-            rows.length === 0 ? chalk.bold(item.content) : item.content;
+          const contentLength = Bun.stringWidth(
+            item.content.chunks.map((chunk) => chunk.text).join(),
+          );
+          if (contentLength % 2 === 1) {
+            cellWidth += 1;
+          }
+          cellRenderable.add(
+            new TextRenderable(ctx, {
+              content: item.content,
+            }),
+          );
         } else if (item.type === "image") {
-          if ((cellText += args.values.noRenderImages)) {
-            cellText += chalk.gray(item.content.imageAlt);
+          if (args.values.noRenderImages) {
+            cellRenderable.add(
+              item.content.load(ctx, table.width, cell.content.length > 0),
+            );
             continue;
           }
-          // await item.content.load(
-          //   ctx,
-          //   root.findDescendantById("root-scrollbox")?.width || 80,
-          //   cell.content.length > 1,
-          // );
+          cellRenderable.add(
+            item.content.load(
+              ctx,
+              root.findDescendantById("root-scrollbox")?.width || 80,
+              cell.content.length > 1,
+            ),
+          );
         } else {
           throw new Error(
             `Type not recognized: expected "text" or "image" but got ${item.type}`,
           );
         }
-        cells.push(ansiToTextChunks(cellText));
       }
+      rowRenderable.add(cellRenderable);
     }
-    rows.push(cells);
+    table.add(rowRenderable);
+    table
+      .getChildren()
+      .forEach((row) =>
+        row.getChildren().forEach((cell) => (cell.width = cellWidth)),
+      );
   }
   // console.log("TABLE:");
   // rows.forEach((cells) => cells.forEach((cell) => console.log(cell)));
   // console.log("TABLE ORIGINAL CONTENT:");
   // console.log(tableToken.content);
-  return rows;
+  return table;
 }
 
 // NOTE: chatgpt made a prototype of this
@@ -576,15 +658,7 @@ export async function renderMarkdown(
       //#endregion
       //#region table
       case "table":
-        componentArray.push(
-          new TextTableRenderable(renderer, {
-            content: await renderTable(ctx, token),
-            maxWidth: parseInt(args.values.width) - 1,
-            cellPaddingX: 1,
-            columnWidthMode: "content",
-            columnFitter: "balanced",
-          }),
-        );
+        componentArray.push(await renderTable(ctx, token));
         break;
       //#endregion
       //#region bullet list

@@ -7,15 +7,12 @@ import type { Token } from "markdown-it";
 import * as Shiki from "shiki";
 import { join, dirname, isAbsolute } from "path";
 import {
-  Box,
   BoxRenderable,
   createTextAttributes,
   ImageRenderable,
-  link,
   RGBA,
   StyledText,
   TextRenderable,
-  type AlignString,
   type RenderContext,
   type TextChunk,
 } from "@opentui/core";
@@ -68,7 +65,7 @@ interface BaseProcessedToken {
 interface TableCellToken extends BaseProcessedToken {
   type: "table-cell";
   content: ProcessedToken[];
-  properties: { textAlign: "left" | "center" | "right" };
+  properties: { textAlign: "flex-start" | "center" | "flex-end" };
 }
 
 interface TableToken extends BaseProcessedToken {
@@ -584,13 +581,23 @@ export async function table(tokens: Token[], filePath: string) {
       const alignMatch = String(token.attrGet("style"))?.match(
         /text-align:\s*(\w+)/,
       );
-      currentAlign = alignMatch?.[1] ?? "center";
+      currentAlign =
+        alignMatch?.[1] === "left"
+          ? "flex-start"
+          : alignMatch?.[1] === "right"
+            ? "flex-end"
+            : (alignMatch?.[1] ?? "center");
     },
     td_open: (token: Token): void => {
       const alignMatch = String(token.attrGet("style"))?.match(
         /text-align:\s*(\w+)/,
       );
-      currentAlign = alignMatch?.[1] ?? "left";
+      currentAlign =
+        alignMatch?.[1] === "left"
+          ? "flex-start"
+          : alignMatch?.[1] === "right"
+            ? "flex-end"
+            : (alignMatch?.[1] ?? "flex-start");
     },
     inline: async (token: Token, filePath: string): Promise<void> => {
       currentRow.push({

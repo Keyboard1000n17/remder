@@ -291,15 +291,23 @@ A manual line break<br>inside HTML.
 
 ## GitHub alerts
 
-> [!NOTE] Useful information for the reader.
+<!--prettier-ignore-start-->
+> [!NOTE]
+> Useful information for the reader.
 
-> [!TIP] A helpful suggestion.
+> [!TIP]
+> A helpful suggestion.
 
-> [!IMPORTANT] Important information.
+> [!IMPORTANT]
+>Important information.
 
-> [!WARNING] Warning information.
+> [!WARNING]
+> Warning information.
 
-> [!CAUTION] Something that could cause an unwanted result.
+> [!CAUTION]
+> Something that could cause an unwanted result.
+<!--prettier-ignore-end-->
+<!--prettier is a bit dumb here-->
 
 ## Math
 

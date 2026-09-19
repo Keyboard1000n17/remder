@@ -260,16 +260,17 @@ function makeTaskList(item: ProcessedToken) {
           if (text.type === "text") {
             const startsWith =
               text.content.chunks[0]?.text.match(/^\[[ xX]\]\s*/);
-            const replace = (text: string, toReplace: string) =>
-              toReplace.trim().toLowerCase() === "[x]"
-                ? text.replace(toReplace, chalk.bgGray(" \uf00c ") + " ")
-                : text.replace("[ ]", chalk.bgGray("   "));
-
             if (startsWith?.[0]) {
-              text.content.chunks[0]!.text = replace(
-                text.content.chunks[0]?.text!,
-                startsWith[0],
-              );
+              text.content.chunks[0]!.text =
+                text.content.chunks[0]!.text.replace(startsWith[0], " ");
+              text.content.chunks.unshift({
+                __isChunk: true,
+                text:
+                  startsWith?.[0].trim().toLowerCase() === "[x]"
+                    ? " \uf00c "
+                    : "   ",
+                bg: RGBA.fromHex("#808080"),
+              });
             }
             content.push({
               ...text,
@@ -284,7 +285,7 @@ function makeTaskList(item: ProcessedToken) {
         content.push({
           ...child,
           content: Array.isArray(child.content)
-            ? (child.content as ProcessedToken[]).map((t) => makeTaskList(t))
+            ? child.content.map((t) => makeTaskList(t))
             : child.content,
         });
         break;
@@ -770,12 +771,15 @@ export async function renderMarkdown(
       //#endregion
       //#region alerts
       case "alert": {
-        const alertIcons: Record<string, { icon: string; color: string }> = {
-          Note: { icon: "\uf129", color: "#6af" },
-          Tip: { icon: "\uf400", color: "#3b4" },
-          Important: { icon: "\uf12a", color: "#96f" },
-          Warning: { icon: "\uea6c", color: "#dd4" },
-          Caution: { icon: "\u{f0ce6}", color: "#f44" },
+        const alertIcons: Record<
+          string,
+          { icon: string; color: string; name: string }
+        > = {
+          note: { icon: "\uf129", color: "#6af", name: "Note" },
+          tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
+          important: { icon: "\uf12a", color: "#96f", name: "Important" },
+          warning: { icon: "\uea6c", color: "#dd4", name: "Warning" },
+          caution: { icon: "\u{f0ce6}", color: "#f44", name: "Caution" },
         };
         const uhb = "\u258c"; // unicode left half block
         const alertType = token.properties.alertType;
@@ -801,12 +805,12 @@ export async function renderMarkdown(
         });
         alertBox.add(
           Text({
-            content: `${alertIconAndColor?.icon} ${alertType}`,
+            content: `${alertIconAndColor?.icon} ${alertIconAndColor?.name}`,
             fg: RGBA.fromHex(alertIconAndColor?.color || ""),
           }),
         );
-        (await renderMarkdown(token.content as ProcessedToken[], ctx)).forEach(
-          (renderable) => alertBox.add(renderable),
+        (await renderMarkdown(token.content, ctx)).forEach((renderable) =>
+          alertBox.add(renderable),
         );
         componentArray.push(alertBox);
         break;

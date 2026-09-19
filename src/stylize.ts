@@ -625,7 +625,7 @@ async function alerts(tokens: Token[], filePath: string): Promise<AlertToken> {
     type: "alert",
     content: stylizedChildren,
     properties: {
-      alertType: (tokens[0]?.meta?.title as string) || "",
+      alertType: (tokens[0]?.meta?.type as string) || "",
     },
   };
 }

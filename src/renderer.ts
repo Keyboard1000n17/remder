@@ -1,6 +1,10 @@
 //#region imports
 import parseInput from "./parse-input.ts";
-import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.ts";
+import stylize, {
+  flushLogBuffer,
+  type HeadingObject,
+  type ProcessedToken,
+} from "./stylize.ts";
 import {
   createCliRenderer,
   Box,
@@ -556,7 +560,13 @@ export async function renderMarkdown(
         const content = token.content;
         const paragraphBox = new BoxRenderable(ctx, {
           padding: 0,
-          alignItems: token.properties.align ?? "left",
+          alignItems: token.properties.align ?? "flex-start",
+          ...(content.every((element) => element.type === "image") && {
+            flexDirection: "row",
+            justifyContent: "flex-start",
+            columnGap: 1,
+            alignSelf: "flex-start",
+          }),
         });
         for (const element of content) {
           if (element.type === "image") {
@@ -566,8 +576,8 @@ export async function renderMarkdown(
                 ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
                 : image.load(
                   ctx,
-                  root.findDescendantById("root-scrollbox")?.width || 80,
-                  content.length > 1,
+                  ctx.width - 2,
+                  content.length > 1, // this argument is a boolean!
                 ),
             );
           } else if (element.type === "text") {
@@ -1009,6 +1019,8 @@ const renderer = await createCliRenderer({
     sizePercent: 60,
   },
 });
+
+flushLogBuffer();
 
 const root = new BoxRenderable(renderer, {
   width: "100%",

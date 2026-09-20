@@ -17,6 +17,44 @@ import {
   type TextChunk,
 } from "@opentui/core";
 import { randomUUID } from "crypto";
+import { Logger } from "tslog";
+
+type BufferedLog = {
+  level: "log" | "error";
+  line: string;
+};
+
+const logbuf: BufferedLog[] = [];
+let writeLog: ((entry: BufferedLog) => void) | undefined;
+
+const logger = new Logger({ type: "hidden" });
+
+logger.attachTransport({
+  format: "pretty",
+  write(record, line) {
+    const entry: BufferedLog = {
+      level: (record._logMeta?.logLevelId || 5) >= 5 ? "error" : "log",
+      line,
+    };
+
+    if (writeLog) {
+      writeLog(entry);
+    } else {
+      logbuf.push(entry);
+    }
+  },
+});
+
+export function flushLogBuffer() {
+  // Set this first so logs emitted later go directly to OpenTUI.
+  writeLog = ({ level, line }) => {
+    (level === "error" ? console.error : console.log)(line);
+  };
+
+  for (const entry of logbuf.splice(0)) {
+    writeLog(entry);
+  }
+}
 
 type InlineStyle = keyof typeof inline;
 type StateEntry = string | InlineStyle;
@@ -213,8 +251,8 @@ export class Image {
     process.env.TERM || "",
   );
   static async #getBuffer(filePath: string, path: string) {
-    console.log("path: " + path + " | " + "absolute?: " + isAbsolute(path));
-    console.log(
+    logger.info("path: " + path + " | " + "absolute?: " + isAbsolute(path));
+    logger.info(
       "tried to access",
       isAbsolute(path) ? path : join(dirname(filePath), path),
     );
@@ -225,7 +263,7 @@ export class Image {
           isAbsolute(path) ? path : join(dirname(filePath), path),
         ).bytes();
     } catch (err) {
-      console.error(err);
+      logger.error(`${err}`);
       return undefined;
     }
   }
@@ -246,7 +284,7 @@ export class Image {
     }
     const getImageSize = (await import("image-size")).imageSize;
     const imageSize = getImageSize(tempBuf!);
-    console.log("image type?:", imageSize.type === "svg");
+    logger.info("image type?:", imageSize.type);
     const buf =
       imageSize.type === "svg"
         ? new Resvg(Buffer.from(tempBuf!), {
@@ -270,22 +308,29 @@ export class Image {
       padding: 0,
       margin: 0,
       onLoad: async () => {
+        const ratio =
+          (imageSize.width / imageSize.height) *
+          imageRenderable.cellAspectRatio;
+
+        if (makeOneRowHigh) {
+          const height = 1;
+          const width = ratio / height;
+          imageRenderable.width = width;
+          imageRenderable.height = height;
+        } else {
+          const width = 0.5 * parentWidth;
+          const height = width / ratio;
+          imageRenderable.width = width;
+          imageRenderable.height = height;
+        }
         clearInterval(spinnerLoop);
-        const width = 0.5 * parentWidth;
-        const height = makeOneRowHigh
-          ? 1
-          : width /
-          ((imageSize.width / imageSize.height) *
-            imageRenderable.cellAspectRatio);
-        imageRenderable.width = width;
-        imageRenderable.height = height;
         spinner.visible = false;
         wrapper.remove(spinner);
         this.loadState = "loaded";
       },
       onError: (err) => {
         clearInterval(spinnerLoop);
-        console.error(`Caught error: ${err}`);
+        logger.error(`Caught error: ${err}`);
         wrapper.add(
           new TextRenderable(ctx, {
             content: `\u{f082b} ${this.imageAlt}`,
@@ -438,9 +483,9 @@ async function renderInline(token: Token, filePath?: string) {
         } as ProcessedToken);
         tempChunks.splice(0);
       } else if (type === "softbreak") {
-        tempChunks.at(-1)!.text += " ";
+        if (tempChunks.at(-1)) tempChunks.at(-1)!.text += " ";
       } else if (type === "hardbreak") {
-        tempChunks.at(-1)!.text += "\n\n";
+        if (tempChunks.at(-1)) tempChunks.at(-1)!.text += "\n\n";
       } else if (type === "code_inline") {
         tempChunks.push({
           __isChunk: true,

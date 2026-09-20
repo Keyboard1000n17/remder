@@ -41,7 +41,7 @@ Nested: **bold with _italic_ inside**, _italic with **bold** inside_, and
 
 ## Inline code
 
-Use `inline code` and ``code containing `a backtick` ``.
+Use `inline code` and ``code containing `a backtick`‎``.
 
 ## Links
 

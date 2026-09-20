@@ -13,6 +13,7 @@ import {
   RGBA,
   StyledText,
   TextRenderable,
+  type JustifyString,
   type RenderContext,
   type TextChunk,
 } from "@opentui/core";
@@ -355,6 +356,11 @@ export class Image {
   load(ctx: RenderContext, parentWidth: number, makeOneRowHigh: boolean) {
     if (this.loadState === "loaded" || this.loadState === "loading") return;
     this.loadState = "loading";
+    const tokenAlign = this.token.attrGet("align") || "left";
+    if (typeof tokenAlign !== "string")
+      throw new Error(
+        `unhandled case: got ${typeof tokenAlign} instead of string | tokenAlign was ${tokenAlign}`,
+      );
     const wrapper = new BoxRenderable(ctx, {});
     const frames = Image.frames;
     const spinner = new TextRenderable(ctx, {

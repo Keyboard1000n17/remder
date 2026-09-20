@@ -558,16 +558,25 @@ export async function renderMarkdown(
         break;
       case "paragraph": {
         const content = token.content;
+        const tokenAlign = token.properties.align;
+        const alignment = tokenAlign
+          ? tokenAlign === "left"
+            ? "flex-start"
+            : tokenAlign === "right"
+              ? "flex-end"
+              : tokenAlign
+          : "flex-start";
         const paragraphBox = new BoxRenderable(ctx, {
           padding: 0,
-          alignItems: token.properties.align ?? "flex-start",
+          alignItems: alignment,
           ...(content.every((element) => element.type === "image") && {
             flexDirection: "row",
             justifyContent: "flex-start",
             columnGap: 1,
-            alignSelf: "flex-start",
+            alignSelf: alignment,
           }),
         });
+        console.log(`tokenAlign: ${tokenAlign}`);
         for (const element of content) {
           if (element.type === "image") {
             const image = element.content;
@@ -933,7 +942,6 @@ export async function renderMarkdown(
         };
         const summaryBox = new BoxRenderable(ctx, {
           width: "100%",
-          border: true,
           flexDirection: "column",
           rowGap: 1,
           id: detailsId,

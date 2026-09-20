@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@opentui/core": "^0.5.11",
+    "@opentui/keymap": "^0.5.11",
     "@resvg/resvg-js": "^2.6.2",
     "@types/figlet": "^1.7.0",
     "ansi-sequence-parser": "^1.1.3",

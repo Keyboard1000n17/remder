@@ -62,7 +62,7 @@ type Handler = (
   token: Token[],
   filePath: string,
   level?: number,
-) => Promise<ProcessedToken[] | string | HeadingObject>;
+) => Promise<ProcessedToken[] | void | HeadingObject>;
 
 type Handlers = Record<string, Handler>;
 
@@ -90,6 +90,7 @@ type ProcessedTokenTypes =
   | "list_item"
   | "blockquote"
   | "div"
+  | "pre"
   | "";
 
 //#region token definitions
@@ -174,7 +175,7 @@ interface EmptyToken extends BaseProcessedToken {
 
 interface DetailsSummaryToken extends BaseProcessedToken {
   type: "summary";
-  content: string | ProcessedToken[];
+  content: ProcessedToken[];
 }
 
 interface DetailsContentToken extends BaseProcessedToken {
@@ -196,6 +197,11 @@ interface DivToken extends BaseProcessedToken {
   type: "div";
   content: ProcessedToken[];
 }
+
+interface PreToken extends BaseProcessedToken {
+  type: "pre";
+  content: TextToken[];
+}
 //#endregion
 
 export type ProcessedToken =
@@ -216,6 +222,7 @@ export type ProcessedToken =
   | ListItemToken
   | BlockquoteToken
   | DivToken
+  | PreToken
   | ThematicBreakToken;
 
 const enum FontStyle {
@@ -310,7 +317,7 @@ export class Image {
       onLoad: async () => {
         const ratio =
           (imageSize.width / imageSize.height) *
-          imageRenderable.cellAspectRatio;
+          imageRenderable.cellAspectRatio; // cellAspectRatio is around 2 usually
 
         if (makeOneRowHigh) {
           const height = 1;
@@ -680,24 +687,40 @@ async function details(
   filePath: string,
 ): Promise<ProcessedToken[]> {
   const tokenStack = [];
-  const firstToken: Token | undefined = tokens[0];
-  if (!firstToken) throw new Error("This shouldn't have errored!");
-  if (firstToken.type === "summary_open") {
+  const summaryOpenTokenIndex = tokens.findIndex(
+    (token) => token.type === "summary_open",
+  );
+  const summaryCloseTokenIndex = tokens.findIndex(
+    (token) => token.type === "summary_close",
+  );
+  if (summaryOpenTokenIndex !== -1 && summaryCloseTokenIndex !== -1) {
     if (!tokens[1]) throw new Error("How did this happen?");
     tokenStack.push({
       type: "summary",
-      content: await renderInline(tokens[1], filePath),
+      content: await stylize(
+        tokens.slice(summaryOpenTokenIndex + 1, summaryCloseTokenIndex),
+        filePath,
+      ),
       properties: {},
     } satisfies DetailsSummaryToken);
     tokenStack.push({
       type: "content",
-      content: await stylize(tokens.slice(3), filePath),
+      content: await stylize(
+        tokens.slice(summaryCloseTokenIndex + 1),
+        filePath,
+      ),
       properties: {},
     } satisfies DetailsContentToken);
   } else {
     tokenStack.push({
       type: "summary",
-      content: "Details",
+      content: [
+        {
+          type: "text",
+          content: new StyledText([{ __isChunk: true, text: "Details" }]),
+          properties: {},
+        },
+      ],
       properties: {},
     } satisfies DetailsSummaryToken);
     tokenStack.push({
@@ -722,7 +745,7 @@ const handleTokens: Handlers = {
         accumulatedTokenContentString += token.content;
       }
     });
-    return "";
+    return;
   },
   paragraph: async (tokens: Token[], filePath: string) =>
     await renderInline(tokens[0]!, filePath), // it's always just one inline token
@@ -763,7 +786,13 @@ const handleTokens: Handlers = {
         }
       }
     }
-    return builtString;
+    return [
+      {
+        type: "text",
+        content: new StyledText([{ __isChunk: true, text: builtString }]),
+        properties: {},
+      },
+    ];
   }, // strange? well i couldn't bother making a separate function
 };
 
@@ -875,12 +904,15 @@ export default async function stylize(
         push.type = tokenType;
         push.content =
           tokenType === "heading"
-            ? await handler(
+            ? ((await handler(
               accumulatedTokens,
               filePath,
               parseInt(token.tag.split("")[1]!),
-            )
-            : await handler(accumulatedTokens, filePath);
+            )) as HeadingObject)
+            : ((await handler(
+              accumulatedTokens,
+              filePath,
+            )) as ProcessedToken[]);
         if (accumulatedTokenContentString.length > 0) {
           const unknownTagString: ProcessedToken = {
             type: "paragraph",

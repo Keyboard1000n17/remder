@@ -881,25 +881,27 @@ export async function renderMarkdown(
       //#region details
       case "details":
         const detailsId = crypto.randomUUID();
-        const detailsContent = token.content as ProcessedToken[];
-        const firstToken = detailsContent[0];
-        const summaryText = Text({
-          content: String(firstToken?.content),
-          attributes: createTextAttributes({ bold: true }),
-        });
-        const detailsBox = Box(
-          {
-            id: `details-element-${detailsId}`,
-            visible: false,
-            alignSelf: token.properties.align ?? "left",
-            alignItems: token.properties.align ?? "left",
-          },
-          await renderMarkdown(
-            detailsContent[1]?.content as ProcessedToken[],
-            ctx,
-          ),
-        );
+        const detailsContent = token.content;
         const isOpen = token.properties.open;
+        const summaryToken = detailsContent.find((t) => t.type === "summary");
+        const summaryText = new BoxRenderable(ctx, {});
+        if (summaryToken)
+          (await renderMarkdown(summaryToken.content, ctx)).forEach(
+            (renderable) => summaryText.add(renderable),
+          );
+        const detailsBox = Box({
+          id: `details-element-${detailsId}`,
+          visible: isOpen ? true : false,
+          alignSelf: token.properties.align ?? "left",
+          alignItems: token.properties.align ?? "left",
+          rowGap: 1,
+        });
+        (
+          await renderMarkdown(
+            detailsContent.find((t) => t.type === "content")!.content,
+            ctx,
+          )
+        ).forEach((renderable) => detailsBox.add(renderable)); // the content of the details element
         const indicators = Box(
           { id: `indicators-details-${detailsId}` },
           Text({
@@ -914,8 +916,9 @@ export async function renderMarkdown(
           }),
         );
         const onSelect = () => {
-          const detailsElement =
-            summaryBox.findDescendantById("details-element");
+          const detailsElement = summaryBox.findDescendantById(
+            `details-element-${detailsId}`,
+          );
           if (detailsElement) detailsElement.visible = !detailsElement.visible;
           const openIndicator = summaryBox.findDescendantById(
             `open-indicator-${summaryBox.id}`,

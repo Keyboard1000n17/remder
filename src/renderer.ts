@@ -11,7 +11,6 @@ import {
   Text,
   Select,
   type TextChunk,
-  TextTableRenderable,
   ScrollBox,
   RGBA,
   createTextAttributes,
@@ -26,7 +25,9 @@ import {
   TextRenderable,
   type RenderContext,
   type BorderSides,
+  RenderableEvents,
 } from "@opentui/core";
+import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { parseArgs } from "node:util";
 import got from "got";
 import chalk from "chalk";
@@ -164,6 +165,7 @@ const languageToNerdFontIconMap: Record<string, string> = {
 //#endregion
 
 const colorPalette = createColorPalette();
+
 const headingsArrayForToc: {
   text: string;
   level: number;
@@ -172,6 +174,9 @@ const headingsArrayForToc: {
 }[] = []; // holds an array of all the headings in the document
 let headingIndexForToc = 0;
 const headingIndexes = [0, 0, 0, 0, 0, 0];
+
+const detailsElementsArray: Renderable[] = [];
+let detailsElementsIndex = -1;
 
 //#region utility functions: `rgbToRGBA`, `randomIdGenerator` `ansiToTextChunks`, `ansiToTextToken`
 const rgbToRGBA = ([r, g, b]: [number, number, number]): [
@@ -343,6 +348,7 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
     );
   const table = new BoxRenderable(ctx, {
     width: "100%",
+    maxWidth: ctx.width - 3,
     gap: 0,
   });
   const maxCellWidth = Math.round(
@@ -576,7 +582,6 @@ export async function renderMarkdown(
             alignSelf: alignment,
           }),
         });
-        console.log(`tokenAlign: ${tokenAlign}`);
         for (const element of content) {
           if (element.type === "image") {
             const image = element.content;
@@ -911,52 +916,60 @@ export async function renderMarkdown(
             ctx,
           )
         ).forEach((renderable) => detailsBox.add(renderable)); // the content of the details element
+        const openIndicator = Text({
+          content: "⏵",
+          visible: isOpen ? false : true,
+          id: `closed-indicator-${detailsId}`,
+        });
+        const closedIndicator = Text({
+          content: "⏷",
+          visible: isOpen ? true : false,
+          id: `open-indicator-${detailsId}`,
+        });
         const indicators = Box(
           { id: `indicators-details-${detailsId}` },
-          Text({
-            content: "⏵",
-            visible: isOpen ? false : true,
-            id: `closed-indicator-${detailsId}`,
-          }),
-          Text({
-            content: "⏷",
-            visible: isOpen ? true : false,
-            id: `open-indicator-${detailsId}`,
-          }),
+          openIndicator,
+          closedIndicator,
         );
         const onSelect = () => {
           const detailsElement = summaryBox.findDescendantById(
             `details-element-${detailsId}`,
           );
           if (detailsElement) detailsElement.visible = !detailsElement.visible;
-          const openIndicator = summaryBox.findDescendantById(
-            `open-indicator-${summaryBox.id}`,
-          );
-          const closedIndicator = summaryBox.findDescendantById(
-            `closed-indicator-${summaryBox.id}`,
-          );
-          [openIndicator!.visible!, closedIndicator!.visible!] = [
-            closedIndicator!.visible,
-            openIndicator!.visible,
-          ];
+          openIndicator.visible = !openIndicator.visible;
+          closedIndicator.visible = !closedIndicator.visible;
         };
         const summaryBox = new BoxRenderable(ctx, {
           width: "100%",
           flexDirection: "column",
           rowGap: 1,
           id: detailsId,
+        });
+        const summaryTextRenderable = new BoxRenderable(ctx, {
+          flexDirection: "row",
+          gap: 1,
+          focusable: true,
           onMouseDown: onSelect,
           onKeyDown: (key: KeyEvent) => {
-            if (key.name === "space" || key.name === "enter") {
+            if (key.name === "space" || key.name === "return") {
               onSelect();
+              summaryBox.border = openIndicator!.visible ? false : ["right"];
+              summaryBox.paddingRight = openIndicator!.visible ? 1 : 0;
             }
           },
         });
-        summaryBox.add(
-          Box({ flexDirection: "row", gap: 1 }, indicators, summaryText),
-        );
+        summaryTextRenderable.add(indicators);
+        summaryTextRenderable.add(summaryText);
+        summaryTextRenderable.on(RenderableEvents.FOCUSED, () => {
+          summaryTextRenderable.backgroundColor = RGBA.fromHex("#333");
+        });
+        summaryTextRenderable.on(RenderableEvents.BLURRED, () => {
+          summaryTextRenderable.backgroundColor = "transparent";
+        });
+        summaryBox.add(summaryTextRenderable);
         summaryBox.add(detailsBox);
         componentArray.push(summaryBox);
+        detailsElementsArray.push(summaryTextRenderable);
         break;
       //#endregion
       //#region default
@@ -1041,6 +1054,20 @@ const root = new BoxRenderable(renderer, {
 });
 renderer.root.add(root);
 
+const contentScrollBoxOpts = {
+  width: "auto" as "auto",
+  minWidth: 0,
+  height: renderer.height - 1,
+  id: "root-scrollbox",
+  flexShrink: 1,
+  flexGrow: 1,
+  paddingRight: 3,
+  contentOptions: {
+    rowGap: 1,
+    paddingLeft: 1,
+  },
+};
+
 if (args.positionals.length > 0) {
   //#region handle supplied file
   const filePath = args.positionals.at(-1);
@@ -1065,40 +1092,14 @@ if (args.positionals.length > 0) {
     // );
     process.exit(0);
   } else {
-    const box = new ScrollBoxRenderable(renderer, {
-      width: "auto",
-      minWidth: 0,
-      height: renderer.height - 1,
-      id: "root-scrollbox",
-      flexShrink: 1,
-      flexGrow: 1,
-      paddingRight: 3,
-      contentOptions: {
-        rowGap: 1,
-      },
-    });
+    const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
     const renderables = await renderMarkdown(
       tokens as ProcessedToken[],
       renderer,
     );
     renderables.forEach((renderable) => {
-      // box.add(Box({ border: true, margin: 0 }, renderable));
       box.add(renderable);
     });
-    const originalHandleKeyPress = box.verticalScrollBar.handleKeyPress.bind(
-      box.verticalScrollBar,
-    );
-    box.verticalScrollBar.handleKeyPress = (key) => {
-      if (key.name === "up" || key.name === "k") {
-        box.scrollBy(-1, "absolute");
-        return true;
-      }
-      if (key.name === "down" || key.name === "j") {
-        box.scrollBy(1, "absolute");
-        return true;
-      }
-      return originalHandleKeyPress(key);
-    };
     box.focus();
     root.add(box);
   }
@@ -1111,38 +1112,85 @@ if (args.positionals.length > 0) {
     tokens as ProcessedToken[],
     renderer,
   );
-  const box = ScrollBox(
-    {
-      width: "auto",
-      minWidth: 0,
-      height: renderer.height - 1,
-      id: "root-scrollbox",
-      flexShrink: 1,
-      flexGrow: 1,
-      paddingRight: 3,
-      contentOptions: {
-        rowGap: 1,
-      },
-    },
-    renderables,
-  );
+  const box = ScrollBox(contentScrollBoxOpts, renderables);
   box.focus();
-  box.onKeyDown = (key) => {
-    if (key.name === "up" || key.name === "k") {
-      box.scrollBy(-1, "absolute");
-      return true;
-    }
-    if (key.name === "down" || key.name === "j") {
-      box.scrollBy(1, "absolute");
-      return true;
-    }
-  };
   root.add(box);
   //#endregion
 } else {
   menu.focus();
   root.add(menu);
 }
+
+const keymap = createDefaultOpenTuiKeymap(renderer);
+keymap.registerLayer({
+  commands: [
+    {
+      name: "app.quit",
+      run() {
+        renderer.destroy();
+        terminalInput.destroy();
+      },
+    },
+    {
+      name: "app.down",
+      run() {
+        (
+          root.findDescendantById(`root-scrollbox`) as
+          ScrollBoxRenderable | undefined
+        )?.scrollBy(1);
+      },
+    },
+    {
+      name: "app.up",
+      run() {
+        (
+          root.findDescendantById(`root-scrollbox`) as
+          ScrollBoxRenderable | undefined
+        )?.scrollBy(-1);
+      },
+    },
+    {
+      name: "content.prevDetails",
+      run() {
+        const detailsElement = detailsElementsArray.at(--detailsElementsIndex);
+        detailsElementsIndex =
+          (detailsElementsIndex - 1 + detailsElementsArray.length) %
+          detailsElementsArray.length;
+        if (detailsElement) {
+          detailsElement?.focus();
+          (
+            root.findDescendantById(`root-scrollbox`) as
+            ScrollBoxRenderable | undefined
+          )?.scrollBy(detailsElement.y);
+        }
+      },
+    },
+    {
+      name: "content.nextDetails",
+      run() {
+        const detailsElement = detailsElementsArray.at(++detailsElementsIndex);
+        detailsElementsIndex =
+          detailsElementsIndex % detailsElementsArray.length;
+        if (detailsElement) {
+          detailsElement?.focus();
+          (
+            root.findDescendantById(`root-scrollbox`) as
+            ScrollBoxRenderable | undefined
+          )?.scrollBy(detailsElement.y);
+        }
+      },
+    },
+  ],
+  bindings: [
+    { key: "q", cmd: "app.quit" },
+    { key: "]d", cmd: "content.nextDetails" },
+    { key: "[d", cmd: "content.prevDetails" },
+    { key: "down", cmd: "app.down" },
+    { key: "j", cmd: "app.down" },
+    { key: "up", cmd: "app.up" },
+    { key: "k", cmd: "app.up" },
+  ],
+});
 
 //#region bottom bar + opts
 const bottomBarOpts: BoxOptions<BoxRenderable> = {
@@ -1270,12 +1318,6 @@ const contentScrollBox = root.findDescendantById(
 //#region keybinds
 const keyHandler = (key: KeyEvent) => {
   const isCapital = key.capsLock ? !key.shift : key.shift;
-  //#region quit
-  if (key.name === "q") {
-    renderer.destroy();
-    return;
-  }
-  //#endregion
   //#region on press ? - help
   if (key.name === "?") {
     const helpMenuBox = root.findDescendantById("helpMenu");

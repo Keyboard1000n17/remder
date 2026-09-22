@@ -1190,6 +1190,56 @@ keymap.registerLayer({
         }
       },
     },
+    {
+      name: "app.help",
+      run() {
+        const helpMenuBox = root.findDescendantById("helpMenu");
+        if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
+      },
+    },
+    {
+      name: "app.console",
+      run() {
+        if (args.values.debug) renderer.console.toggle();
+      },
+    },
+    {
+      name: "app.prevHeading",
+      run() {
+        if (headingsArrayForToc.length > 0) {
+          headingIndexForToc =
+            (headingIndexForToc - 1 + headingsArrayForToc.length) %
+            headingsArrayForToc.length;
+          const id = headingsArrayForToc[headingIndexForToc]?.id;
+          if (!id) return;
+          const heading = root.findDescendantById(id);
+          const y = heading?.y;
+          if (y === undefined || !heading) return;
+          process.nextTick(() =>
+            contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
+          );
+          tocMenu.setSelectedIndex(headingIndexForToc);
+        }
+      },
+    },
+    {
+      name: "content.nextHeading",
+      run() {
+        if (headingsArrayForToc.length > 0) {
+          const id = headingsArrayForToc[headingIndexForToc]?.id;
+          if (!id) return;
+          const heading = root.findDescendantById(id);
+          const y = heading?.y;
+          if (y === undefined || !heading) return;
+          process.nextTick(() =>
+            contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
+          );
+          tocMenu.setSelectedIndex(headingIndexForToc);
+          headingIndexForToc =
+            (headingIndexForToc + 1) % headingsArrayForToc.length;
+        }
+      },
+    },
   ],
   bindings: [
     { key: "q", cmd: "app.quit" },
@@ -1199,6 +1249,10 @@ keymap.registerLayer({
     { key: "j", cmd: "app.down" },
     { key: "up", cmd: "app.up" },
     { key: "k", cmd: "app.up" },
+    { key: "?", cmd: "app.help" },
+    { key: "C", cmd: "app.console" },
+    { key: "K", cmd: "app.prevHeading" },
+    { key: "J", cmd: "app.nextHeading" },
   ],
 });
 
@@ -1324,68 +1378,6 @@ root.add(tocBox);
 const contentScrollBox = root.findDescendantById(
   "root-scrollbox",
 ) as ScrollBoxRenderable;
-
-//#region keybinds
-const keyHandler = (key: KeyEvent) => {
-  const isCapital = key.capsLock ? !key.shift : key.shift;
-  //#region on press ? - help
-  if (key.name === "?") {
-    const helpMenuBox = root.findDescendantById("helpMenu");
-    if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
-    return;
-  }
-  //#endregion
-  //#region on press C - console
-  if (args.values.debug && key.name === "c" && isCapital) {
-    renderer.console.toggle();
-    return;
-  }
-  //#endregion
-  //#region on press J - scroll headings down
-  if (key.name === "j" && headingsArrayForToc.length > 0 && isCapital) {
-    const id = headingsArrayForToc[headingIndexForToc]?.id;
-    if (!id) return;
-    const heading = root.findDescendantById(id);
-    const y = heading?.y;
-    if (y === undefined || !heading) return;
-    process.nextTick(() =>
-      contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
-    );
-    tocMenu.setSelectedIndex(headingIndexForToc);
-    headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
-    return;
-  }
-  //#endregion
-  //#region on press K - scroll headings up
-  if (key.name === "k" && headingsArrayForToc.length > 0 && isCapital) {
-    headingIndexForToc =
-      (headingIndexForToc - 1 + headingsArrayForToc.length) %
-      headingsArrayForToc.length;
-    const id = headingsArrayForToc[headingIndexForToc]?.id;
-    if (!id) return;
-    const heading = root.findDescendantById(id);
-    const y = heading?.y;
-    if (y === undefined || !heading) return;
-    process.nextTick(() =>
-      contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
-    );
-    tocMenu.setSelectedIndex(headingIndexForToc);
-    return;
-  }
-  //#endregion
-  //#region on press T - table of contents
-  if (key.name === "t" && isCapital) {
-    tocBox.visible = !tocBox.visible;
-    return;
-  }
-  //#endregion
-};
-//#endregion
-
-renderer.keyInput.on("keypress", keyHandler);
-renderer.once("destroy", () => {
-  renderer.keyInput.off("keypress", keyHandler);
-});
 
 //#region sync toc and scrollbox
 // when you scroll, this is the code that updates the toc with the heading

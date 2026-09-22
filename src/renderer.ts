@@ -1124,6 +1124,7 @@ if (args.positionals.length > 0) {
 const keymap = createDefaultOpenTuiKeymap(renderer);
 keymap.registerLayer({
   commands: [
+    //#region quit
     {
       name: "app.quit",
       run() {
@@ -1131,6 +1132,8 @@ keymap.registerLayer({
         terminalInput.destroy();
       },
     },
+    //#endregion
+    //#region down
     {
       name: "app.down",
       run() {
@@ -1140,6 +1143,8 @@ keymap.registerLayer({
         )?.scrollBy(1);
       },
     },
+    //#endregion
+    //#region up
     {
       name: "app.up",
       run() {
@@ -1149,6 +1154,8 @@ keymap.registerLayer({
         )?.scrollBy(-1);
       },
     },
+    //#endregion
+    //#region focus previous details
     {
       name: "content.prevDetails",
       run() {
@@ -1171,6 +1178,8 @@ keymap.registerLayer({
         }
       },
     },
+    //#endregion
+    //#region focus next details
     {
       name: "content.nextDetails",
       run() {
@@ -1190,6 +1199,8 @@ keymap.registerLayer({
         }
       },
     },
+    //#endregion
+    //#region help menu
     {
       name: "app.help",
       run() {
@@ -1197,12 +1208,16 @@ keymap.registerLayer({
         if (helpMenuBox) helpMenuBox.visible = !helpMenuBox.visible;
       },
     },
+    //#endregion
+    //#region toggle console
     {
       name: "app.console",
       run() {
         if (args.values.debug) renderer.console.toggle();
       },
     },
+    //#endregion
+    //#region jump to previous heading
     {
       name: "content.prevHeading",
       run() {
@@ -1225,6 +1240,8 @@ keymap.registerLayer({
         }
       },
     },
+    //#endregion
+    //#region jump to next heading
     {
       name: "content.nextHeading",
       run() {
@@ -1246,12 +1263,31 @@ keymap.registerLayer({
         }
       },
     },
+    //#endregion
+    //#region toggle toc
     {
       name: "app.toc",
       run() {
-        tocBox.visible = !tocBox.visible;
+        if (tocBox) tocBox.visible = !tocBox.visible;
       },
     },
+    //#endregion
+    //#region jump to top
+    {
+      name: "content.goToTop",
+      run() {
+        contentScrollBox.scrollTo(0);
+      },
+    },
+    //#endregion
+    //#region jump to bottom
+    {
+      name: "content.goToBottom",
+      run() {
+        contentScrollBox.scrollTo(contentScrollBox.scrollHeight);
+      },
+    },
+    //#endregion
   ],
   bindings: [
     { key: "q", cmd: "app.quit" },
@@ -1266,6 +1302,8 @@ keymap.registerLayer({
     { key: "shift+k", cmd: "content.prevHeading" },
     { key: "shift+j", cmd: "content.nextHeading" },
     { key: "shift+t", cmd: "app.toc" },
+    { key: "g", cmd: "content.goToTop" },
+    { key: "shift+g", cmd: "content.goToBottom" },
   ],
 });
 

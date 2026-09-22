@@ -176,7 +176,7 @@ let headingIndexForToc = 0;
 const headingIndexes = [0, 0, 0, 0, 0, 0];
 
 const detailsElementsArray: Renderable[] = [];
-let detailsElementsIndex = -1;
+let detailsElementsIndex: number | null = null;
 
 //#region utility functions: `rgbToRGBA`, `randomIdGenerator` `ansiToTextChunks`, `ansiToTextToken`
 const rgbToRGBA = ([r, g, b]: [number, number, number]): [
@@ -1152,10 +1152,16 @@ keymap.registerLayer({
     {
       name: "content.prevDetails",
       run() {
-        const detailsElement = detailsElementsArray.at(--detailsElementsIndex);
+        if (!detailsElementsIndex) detailsElementsIndex = 0;
         detailsElementsIndex =
           (detailsElementsIndex - 1 + detailsElementsArray.length) %
           detailsElementsArray.length;
+        const detailsElement = detailsElementsArray.at(detailsElementsIndex);
+        console.log(
+          `pressed previous details. current index is ${detailsElementsIndex}`,
+        );
+        detailsElementsIndex =
+          detailsElementsIndex % detailsElementsArray.length;
         if (detailsElement) {
           detailsElement?.focus();
           (
@@ -1168,9 +1174,13 @@ keymap.registerLayer({
     {
       name: "content.nextDetails",
       run() {
-        const detailsElement = detailsElementsArray.at(++detailsElementsIndex);
+        if (!detailsElementsIndex) detailsElementsIndex = -1;
         detailsElementsIndex =
-          detailsElementsIndex % detailsElementsArray.length;
+          (detailsElementsIndex + 1) % detailsElementsArray.length;
+        const detailsElement = detailsElementsArray.at(detailsElementsIndex);
+        console.log(
+          `pressed previous details. current index is ${detailsElementsIndex}`,
+        );
         if (detailsElement) {
           detailsElement?.focus();
           (

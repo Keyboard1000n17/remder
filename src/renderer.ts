@@ -604,23 +604,40 @@ export async function renderMarkdown(
         break;
       }
       //#endregion
-      //#region heading
+      //#region headings
       case "heading":
-        let str = "";
         if (typeof token.content === "string") throw new Error("What?");
         const tokenContent: HeadingObject = token.content as HeadingObject;
 
         if (args.values.noRenderHeadings) {
           const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
-          const colorMap: Record<number, (str: string) => string> = {
-            1: (str: string) => chalk.bold.hex("#ffa50a")(str),
-            2: (str: string) => chalk.bold.yellow(str),
-            3: (str: string) => chalk.bold.cyan(str),
-            4: (str: string) => chalk.bold.hex("#ffa5a5")(str),
-            5: (str: string) => chalk.bold.green(str),
-            6: (str: string) => chalk.bold.hex("#aaaaaa")(str),
+          const colorMap: Record<number, (str: string) => StyledText> = {
+            1: (str: string) =>
+              new StyledText([
+                { __isChunk: true, text: str, fg: RGBA.fromHex("#ffa50a") },
+              ]),
+            2: (str: string) =>
+              new StyledText([
+                { __isChunk: true, text: str, fg: RGBA.fromHex("#eeee00") },
+              ]),
+            3: (str: string) =>
+              new StyledText([
+                { __isChunk: true, text: str, fg: RGBA.fromHex("#0acadd") },
+              ]),
+            4: (str: string) =>
+              new StyledText([
+                { __isChunk: true, text: str, fg: RGBA.fromHex("#ffa5a5") },
+              ]),
+            5: (str: string) =>
+              new StyledText([
+                { __isChunk: true, text: str, fg: RGBA.fromHex("#22ff22") },
+              ]),
+            6: (str: string) =>
+              new StyledText([
+                { __isChunk: true, text: str, fg: RGBA.fromHex("#aaaaaa") },
+              ]),
           };
-          str = colorMap[tokenContent.level]!(
+          const str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
           );
           const level = tokenContent.level;
@@ -629,7 +646,10 @@ export async function renderMarkdown(
             headingIndexes[i] = 0;
           }
           const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
-          const heading = ansiToTextToken(str, ctx, headingId);
+          const heading = new TextRenderable(ctx, {
+            content: str,
+            alignSelf: token.properties.align ?? "left",
+          });
           componentArray.push(heading);
           if (linksArray.length > 0) {
             componentArray.push(

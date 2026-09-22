@@ -1204,7 +1204,7 @@ keymap.registerLayer({
       },
     },
     {
-      name: "app.prevHeading",
+      name: "content.prevHeading",
       run() {
         if (headingsArrayForToc.length > 0) {
           headingIndexForToc =
@@ -1219,6 +1219,9 @@ keymap.registerLayer({
             contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
           );
           tocMenu.setSelectedIndex(headingIndexForToc);
+          console.log(
+            `prev heading / scrolled to ${heading.y + contentScrollBox.scrollTop}`,
+          );
         }
       },
     },
@@ -1237,7 +1240,16 @@ keymap.registerLayer({
           tocMenu.setSelectedIndex(headingIndexForToc);
           headingIndexForToc =
             (headingIndexForToc + 1) % headingsArrayForToc.length;
+          console.log(
+            `next heading / scrolled to ${heading.y + contentScrollBox.scrollTop}`,
+          );
         }
+      },
+    },
+    {
+      name: "app.toc",
+      run() {
+        tocBox.visible = !tocBox.visible;
       },
     },
   ],
@@ -1250,9 +1262,10 @@ keymap.registerLayer({
     { key: "up", cmd: "app.up" },
     { key: "k", cmd: "app.up" },
     { key: "?", cmd: "app.help" },
-    { key: "C", cmd: "app.console" },
-    { key: "K", cmd: "app.prevHeading" },
-    { key: "J", cmd: "app.nextHeading" },
+    { key: "shift+c", cmd: "app.console" },
+    { key: "shift+k", cmd: "content.prevHeading" },
+    { key: "shift+j", cmd: "content.nextHeading" },
+    { key: "shift+t", cmd: "app.toc" },
   ],
 });
 
@@ -1359,7 +1372,7 @@ const tocMenu = new SelectRenderable(renderer, {
 });
 const tocBox = new BoxRenderable(renderer, {
   visible: false,
-  zIndex: 4,
+  zIndex: 10,
   flexDirection: "column",
   height: "100%",
   width: 40,

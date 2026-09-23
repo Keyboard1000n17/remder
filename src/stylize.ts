@@ -69,7 +69,7 @@ type Handlers = Record<string, Handler>;
 
 export type HeadingObject = {
   text: string;
-  links: string;
+  links: StyledText;
   level: number;
 };
 
@@ -529,9 +529,7 @@ async function renderInline(token: Token, filePath?: string) {
 function heading(token: Token, level = 1) {
   if (token?.type !== "inline")
     throw new Error(
-      Chalk.red.bold(
-        `Wrong token type: expected type inline but got ${token?.type} `,
-      ),
+      `Wrong token type: expected type inline but got ${token?.type} `,
     );
   const links: { text: string; url: string }[] = [];
   let index = 0;
@@ -558,14 +556,16 @@ function heading(token: Token, level = 1) {
     index++;
   }
   const obj: HeadingObject = {
-    links: "",
+    links: new StyledText(
+      links.flatMap((link): TextChunk[] => [
+        { __isChunk: true, text: `${link.text}: ` },
+        { __isChunk: true, text: link.text, link: { url: link.url } },
+        { __isChunk: true, text: "\n" },
+      ]),
+    ),
     text: text,
     level: level,
   };
-  for (let link of links) {
-    const builtLink = `\n${link.text}: ${terminalLink(link.url, link.url, { fallback: false })} `;
-    obj.links += builtLink;
-  }
   return obj;
 }
 

@@ -1,3 +1,74 @@
+//#region args
+import { parseArgs } from "node:util";
+
+const args = parseArgs({
+  options: {
+    noRenderImages: {
+      type: "boolean",
+      default: false,
+      short: "i",
+    },
+    noRenderHeadings: {
+      type: "boolean",
+      default: false,
+      short: "H",
+    },
+    width: {
+      type: "string",
+      default: process.stdout.columns?.toString() || "80",
+      short: "w",
+    },
+    height: {
+      type: "string",
+      default: process.stdout.rows?.toString() || "25",
+      short: "y",
+    },
+    printToStdout: {
+      type: "boolean",
+      default: false,
+      short: "o",
+    },
+    debug: {
+      type: "boolean",
+      default: false,
+      short: "d",
+    },
+    help: {
+      type: "boolean",
+      default: false,
+      short: "h",
+    },
+  },
+  allowPositionals: true,
+});
+//#endregion
+
+//#region help
+if (args.values.help) {
+  const options = [
+    ["-h, --help", "Print this help message and exit"],
+    ["-d, --debug", "Enable debug mode (enables console)"],
+    ["-i, --no-render-images", "Disable rendering images"],
+    [
+      "-H, --no-render-headings",
+      "Render headings with color instead of huge text",
+    ],
+    ["-w, --width <width>", "Set the TUI width"],
+    ["-y, --height <height>", "Set the TUI height"],
+  ];
+  const optionWidth = Math.max(...options.map(([option]) => option!.length));
+  const helpText = [
+    "Usage: remder [options] <file?>",
+    ...options.map(
+      ([option, description]) =>
+        `  ${option!.padEnd(optionWidth + 2)}${description}`,
+    ),
+  ].join("\n");
+  console.log(helpText);
+  process.exit(0);
+}
+//#endregion
+
 //#region imports
 import parseInput from "./parse-input.ts";
 import stylize, {
@@ -28,7 +99,6 @@ import {
   RenderableEvents,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import { parseArgs } from "node:util";
 import got from "got";
 import chalk from "chalk";
 import { readdir, stat } from "node:fs/promises";
@@ -305,42 +375,6 @@ function makeTaskList(item: ProcessedToken) {
   return { ...item, content };
 }
 
-const args = parseArgs({
-  options: {
-    noRenderImages: {
-      type: "boolean",
-      default: false,
-      short: "i",
-    },
-    noRenderHeadings: {
-      type: "boolean",
-      default: false,
-      short: "H",
-    },
-    width: {
-      type: "string",
-      default: process.stdout.columns?.toString() || "80",
-      short: "w",
-    },
-    height: {
-      type: "string",
-      default: process.stdout.rows?.toString() || "25",
-      short: "h",
-    },
-    printToStdout: {
-      type: "boolean",
-      default: false,
-      short: "o",
-    },
-    debug: {
-      type: "boolean",
-      default: false,
-      short: "d",
-    },
-  },
-  allowPositionals: true,
-});
-
 async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
   if (tableToken.type !== "table")
     throw new Error(
@@ -610,7 +644,6 @@ export async function renderMarkdown(
         const tokenContent: HeadingObject = token.content as HeadingObject;
 
         if (args.values.noRenderHeadings) {
-          const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
           const colorMap: Record<number, (str: string) => StyledText> = {
             1: (str: string) =>
               new StyledText([
@@ -651,10 +684,10 @@ export async function renderMarkdown(
             alignSelf: token.properties.align ?? "left",
           });
           componentArray.push(heading);
-          if (linksArray.length > 0) {
+          if (tokenContent.links.chunks.length > 0) {
             componentArray.push(
               new TextRenderable(ctx, {
-                content: new StyledText(linksArray),
+                content: tokenContent.links,
                 alignSelf: token.properties.align ?? "left",
               }),
             );
@@ -684,11 +717,10 @@ export async function renderMarkdown(
           (char) => heading.add(Text({ content: char, flexShrink: 0 })),
         );
         componentArray.push(heading);
-        const linksArray: TextChunk[] = ansiToTextChunks(tokenContent.links);
-        if (linksArray.length > 0) {
+        if (tokenContent.links.chunks.length > 0) {
           componentArray.push(
             new TextRenderable(ctx, {
-              content: new StyledText(linksArray),
+              content: tokenContent.links,
               alignSelf: token.properties.align ?? "left",
             }),
           );

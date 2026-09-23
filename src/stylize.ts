@@ -13,7 +13,6 @@ import {
   RGBA,
   StyledText,
   TextRenderable,
-  type JustifyString,
   type RenderContext,
   type TextChunk,
 } from "@opentui/core";
@@ -280,7 +279,6 @@ export class Image {
     wrapper: BoxRenderable,
     spinner: TextRenderable,
     spinnerLoop: ReturnType<typeof setInterval>,
-    parentWidth: number,
     makeOneRowHigh: boolean,
   ) {
     const tempBuf = await this.imageBuffer!;
@@ -292,18 +290,44 @@ export class Image {
     }
     const getImageSize = (await import("image-size")).imageSize;
     const imageSize = getImageSize(tempBuf!);
-    logger.info("image type?:", imageSize.type);
+    const cellAspectRatio =
+      (ctx.resolution?.height || 1920) /
+      (ctx.terminalHeight || 25) /
+      ((ctx.resolution?.width || 1080) / (ctx.terminalWidth || 80));
+    logger.info(`image type: ${imageSize.type}`);
+    const rowHeight =
+      (ctx.resolution?.height || 1080) / (ctx.terminalHeight || 25);
+    const cellWidth =
+      (ctx.resolution?.width || 1920) / (ctx.terminalWidth || 80);
+    const pxRatio = imageSize.width / imageSize.height;
+    const ratio = pxRatio * cellAspectRatio; // cellAspectRatio is around 2 usually
+    let tempWidth = imageSize.width;
+    const passedWidth = this.token.attrGet("width");
+    const passedHeight = this.token.attrGet("height");
+    if (passedWidth) {
+      tempWidth =
+        typeof passedWidth === "string" ? Number(passedWidth) : passedWidth;
+    } else if (passedHeight) {
+      tempWidth =
+        pxRatio *
+        (typeof passedHeight === "string"
+          ? Number(passedHeight)
+          : passedHeight);
+    } else if (makeOneRowHigh || imageSize.height <= rowHeight) {
+      tempWidth = ratio * cellWidth;
+    }
+    if (tempWidth > (ctx.resolution?.width ?? 1920) - 3 * cellWidth)
+      tempWidth = (ctx.resolution?.width ?? 1920) - 3 * cellWidth;
+    const width = tempWidth;
+    logger.info(
+      `width for ${this.imageAlt || "unknown"}: ${width}, ${width / cellWidth}`,
+    );
     const buf =
       imageSize.type === "svg"
         ? new Resvg(Buffer.from(tempBuf!), {
           fitTo: {
             mode: "width",
-            value:
-              0.5 *
-              parentWidth *
-              (ctx.resolution?.width
-                ? ctx.resolution?.width / (ctx.terminalWidth ?? 80)
-                : 8),
+            value: width,
           },
           shapeRendering: 2,
         })
@@ -316,21 +340,9 @@ export class Image {
       padding: 0,
       margin: 0,
       onLoad: async () => {
-        const ratio =
-          (imageSize.width / imageSize.height) *
-          imageRenderable.cellAspectRatio; // cellAspectRatio is around 2 usually
-
-        if (makeOneRowHigh) {
-          const height = 1;
-          const width = ratio / height;
-          imageRenderable.width = width;
-          imageRenderable.height = height;
-        } else {
-          const width = 0.5 * parentWidth;
-          const height = width / ratio;
-          imageRenderable.width = width;
-          imageRenderable.height = height;
-        }
+        imageRenderable.width = width / cellWidth;
+        imageRenderable.height = width / cellWidth / ratio;
+        logger.info(`image height: ${width / ratio}`);
         clearInterval(spinnerLoop);
         spinner.visible = false;
         wrapper.remove(spinner);
@@ -359,13 +371,13 @@ export class Image {
     const tokenAlign = this.token.attrGet("align") || "left";
     if (typeof tokenAlign !== "string")
       throw new Error(
-        `unhandled case: got ${typeof tokenAlign} instead of string | tokenAlign was ${tokenAlign}`,
+        `unhandled case: got ${typeof tokenAlign} instead of string | tokenAlign was ${tokenAlign} `,
       );
     const wrapper = new BoxRenderable(ctx, {});
     const frames = Image.frames;
     const spinner = new TextRenderable(ctx, {
       content: `${frames[0]} Loading`,
-      id: `${this.id}__spinner`,
+      id: `${this.id} __spinner`,
     });
     const spinnerLoop = setInterval(() => {
       Image.frame = (Image.frame + 1) % frames.length;
@@ -374,9 +386,7 @@ export class Image {
       ]);
     }, 80);
     wrapper.add(spinner);
-    this.#finishLoad(
-      ...[ctx, wrapper, spinner, spinnerLoop, parentWidth, makeOneRowHigh],
-    );
+    this.#finishLoad(...[ctx, wrapper, spinner, spinnerLoop, makeOneRowHigh]);
     return wrapper;
   }
 }
@@ -384,13 +394,15 @@ export class Image {
 async function image(token: Token, filePath: string) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
-    throw new Error(`Wrong token type: expected image but got ${token.type}`);
+    throw new Error(`Wrong token type: expected image but got ${token.type} `);
   const path = token.attrGet("src");
   if (typeof path !== "string")
     throw new Error("Something went wrong, this shouldn't happen!");
-  const alt = token.attrGet("alt") ?? token.children?.[0]?.content;
-  ("No alt text provided");
-  return new Image(String(path), filePath, String(alt), token);
+  const alt =
+    (token.attrGet("alt") as string) ||
+    token.children?.[0]?.content ||
+    "No alt text provided";
+  return new Image(String(path), filePath, alt, token);
 }
 
 const inline: Record<string, (text: string) => string> = {
@@ -412,7 +424,7 @@ async function renderInline(token: Token, filePath?: string) {
   if (token.type === "inline") {
     state.push("inline");
     if (!token.children)
-      throw new Error(`Something went wrong. This shouldn't happen.`);
+      throw new Error(`Something went wrong.This shouldn't happen.`);
     const styleAliases: Record<string, string> = {
       strong: "bold",
       em: "italic",

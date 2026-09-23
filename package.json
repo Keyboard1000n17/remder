@@ -12,8 +12,8 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@opentui/core": "^0.5.11",
-    "@opentui/keymap": "^0.5.11",
+    "@opentui/core": "^0.5.12",
+    "@opentui/keymap": "^0.5.12",
     "@resvg/resvg-js": "^2.6.2",
     "@types/figlet": "^1.7.0",
     "ansi-sequence-parser": "^1.1.3",

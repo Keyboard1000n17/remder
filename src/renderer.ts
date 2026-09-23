@@ -1381,7 +1381,7 @@ bottomBar.add(
     },
     Text({
       content: "reMDer",
-      attributes: createTextAttributes({ bold: true, italic: true }),
+      attributes: createTextAttributes({ bold: true }),
     }),
   ),
 );
@@ -1408,19 +1408,28 @@ const helpMenuChildrenOpts: TextOptions = {
   width: "auto",
   height: 1,
 };
+// prettier-ignore
 const helpMenuChildren = [
-  Text({ content: "q - quit", ...helpMenuChildrenOpts }),
+  Text({ content: "q        quit", ...helpMenuChildrenOpts }),
+  Text({ content: "j/down   go down", ...helpMenuChildrenOpts }),
+  Text({ content: "k/up     go up", ...helpMenuChildrenOpts }),
+  Text({ content: "J        jump to next heading", ...helpMenuChildrenOpts }),
+  Text({ content: "K        jump to previous heading", ...helpMenuChildrenOpts }),
+  Text({ content: "T        toggle table of contents", ...helpMenuChildrenOpts }),
+  Text({ content: "?        help menu", ...helpMenuChildrenOpts }),
+  Text({ content: "g        go to top", ...helpMenuChildrenOpts }),
+  Text({ content: "G        go to bottom", ...helpMenuChildrenOpts }),
+  Text({ content: "[d       go to previous details element", ...helpMenuChildrenOpts, }),
+  Text({ content: "]d       go to next details element", ...helpMenuChildrenOpts }),
 ];
 if (args.values.debug) {
   helpMenuChildren.push(
-    Text({ content: "C - toggle console", ...helpMenuChildrenOpts }),
+    Text({ content: "C      - toggle console", ...helpMenuChildrenOpts }),
   );
 }
 const helpMenuOpts: BoxOptions<BoxRenderable> = {
-  flexDirection: "row",
+  flexDirection: "column",
   position: "absolute",
-  bottom: 2,
-  right: 2,
   gap: 1,
   padding: 1,
   border: true,
@@ -1432,8 +1441,14 @@ const helpMenuOpts: BoxOptions<BoxRenderable> = {
   id: "helpMenu",
   visible: false,
   zIndex: 5,
+  onSizeChange() {
+    helpMenuBox.top = Math.floor((root.height - helpMenuBox.height) / 2);
+    helpMenuBox.left = Math.floor((root.width - helpMenuBox.width) / 2);
+  },
 };
-const helpMenuBox = Box(helpMenuOpts, ...helpMenuChildren);
+const helpMenuBox = new BoxRenderable(renderer, helpMenuOpts);
+helpMenuChildren.forEach((child) => helpMenuBox.add(child));
+console.log(root.height, helpMenuBox.height, root.width, helpMenuBox.width);
 root.add(helpMenuBox);
 //#endregion
 

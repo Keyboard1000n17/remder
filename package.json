@@ -26,6 +26,7 @@
     "markdown-it-emoji": "^3.1.0",
     "markdown-it-github-alerts": "^1.0.1",
     "shiki": "^4.4.3",
+    "table": "^6.9.0",
     "terminal-image": "^5.0.1",
     "terminal-link": "^5.0.0",
     "tslog": "^5.2.0"

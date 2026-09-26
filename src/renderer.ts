@@ -69,43 +69,140 @@ if (args.values.help) {
 }
 //#endregion
 
-//#region imports
 import parseInput from "./parse-input.ts";
-import stylize, {
-  flushLogBuffer,
-  type HeadingObject,
-  type ProcessedToken,
-} from "./stylize.ts";
-import {
-  createCliRenderer,
-  Box,
-  Text,
-  Select,
-  type TextChunk,
-  ScrollBox,
-  RGBA,
-  createTextAttributes,
-  StyledText,
-  KeyEvent,
-  type BoxOptions,
-  BoxRenderable,
-  type TextOptions,
-  ScrollBoxRenderable,
-  SelectRenderable,
-  Renderable,
-  TextRenderable,
-  type RenderContext,
-  type BorderSides,
-  RenderableEvents,
-} from "@opentui/core";
-import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.ts";
 import got from "got";
-import chalk from "chalk";
-import { readdir, stat } from "node:fs/promises";
-import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
-import { openSync } from "node:fs";
-import type { FontName } from "figlet";
-//#endregion
+// these three are imported beforehand because they are required in the tokensToString function which is defined towards the start
+
+// defined before tokensToString function because they're required there
+const alignText = (
+  text: string,
+  align: "left" | "center" | "right",
+): string => {
+  const width = parseInt(args.values.width);
+  if (align === "left") {
+    return text;
+  } else if (align === "right") {
+    return text
+      .split("\n")
+      .map((line) =>
+        line.padStart(Math.max(0, Bun.stringWidth(line) - width), " "),
+      )
+      .join("\n");
+  } else if (align === "center") {
+    return text
+      .split("\n")
+      .map((line) =>
+        line.padStart(Math.max(0, (width - Bun.stringWidth(line)) / 2)),
+      )
+      .join("");
+  }
+  throw new Error(`Got align string "${align}"`);
+};
+
+const chunksToAnsi = (chunks: TextChunk[]) => {
+  return chunks
+    .map((chunk) => {
+      let text = chunk.text;
+      const attrs = chunk.attributes;
+      if (chunk.fg) {
+        const fg = chunk.fg.toInts().slice(0, 3) as [number, number, number];
+        text = chalk.rgb(...fg)(text);
+      }
+      if (chunk.bg) {
+        const bg = chunk.bg.toInts().slice(0, 3) as [number, number, number];
+        text = chalk.bgRgb(...bg)(text);
+      }
+      if (chunk.link) {
+        import("terminal-link")
+          .then((r) => r.default)
+          .then((terminalLink) => (text = terminalLink(text, chunk.link!.url)));
+      }
+      if (attrs && attrs & TextAttributes.BOLD) text = chalk.bold(text);
+      if (attrs && attrs & TextAttributes.ITALIC) text = chalk.italic(text);
+      if (attrs && attrs & TextAttributes.STRIKETHROUGH)
+        text = chalk.strikethrough(text);
+      if (attrs && attrs & TextAttributes.UNDERLINE)
+        text = chalk.underline(text);
+      return text;
+    })
+    .join("");
+};
+
+async function makeFigletFont(
+  text: string,
+  level: number,
+  align: "left" | "center" | "right",
+) {
+  const figlet = (await import("figlet")).default;
+  figlet.parseFont(
+    "Calvin S Modified",
+    await Bun.file(`${import.meta.dir}/fonts/calvin-s.flf`).text(),
+  );
+  const fontsList: Record<number, FontName> = {
+    1: "ANSI Regular",
+    2: "Coder Mini",
+    3: "ANSI Compact",
+    4: "Small",
+    5: "miniwi",
+    6: "Calvin S Modified",
+  };
+  return figlet
+    .textSync(text.trim(), {
+      font: fontsList[level],
+      width: parseInt(args.values.width),
+      whitespaceBreak: true,
+    })
+    .split(/\n\s+\n/)
+    .map((line) => alignText(line, align))
+    .join("\n\n");
+}
+
+function makeTaskList(item: ProcessedToken) {
+  if (item.type !== "list_item") throw new Error("");
+  const content: ProcessedToken[] = [];
+  for (const child of item.content as ProcessedToken[]) {
+    switch (child.type) {
+      case "paragraph":
+        child.content.forEach((text) => {
+          if (text.type === "text") {
+            const startsWith =
+              text.content.chunks[0]?.text.match(/^\[[ xX]\]\s*/);
+            if (startsWith?.[0]) {
+              text.content.chunks[0]!.text =
+                text.content.chunks[0]!.text.replace(startsWith[0], " ");
+              text.content.chunks.unshift({
+                __isChunk: true,
+                text:
+                  startsWith?.[0].trim().toLowerCase() === "[x]"
+                    ? " \uf00c "
+                    : "   ",
+                bg: RGBA.fromHex("#808080"),
+              });
+            }
+            content.push({
+              ...text,
+              content: text.content,
+            });
+          } else {
+            content.push(text);
+          }
+        });
+        break;
+      case "bullet_list":
+        content.push({
+          ...child,
+          content: Array.isArray(child.content)
+            ? child.content.map((t) => makeTaskList(t))
+            : child.content,
+        });
+        break;
+      default:
+        content.push(child);
+    }
+  }
+  return { ...item, content };
+}
 
 //#region icon map
 const languageToNerdFontIconMap: Record<string, string> = {
@@ -234,6 +331,352 @@ const languageToNerdFontIconMap: Record<string, string> = {
 };
 //#endregion
 
+//#region --print-to-stdout option
+// NOTE: chatgpt made a prototype of this
+if (args.values.printToStdout) {
+  async function tokensToString(
+    tokens: ProcessedToken[],
+    indent = 0,
+  ): Promise<string> {
+    const contentStrings: string[] = [];
+    const chalk = (await import("chalk")).default;
+    const terminalImage =
+      tokens.some(
+        (t) =>
+          t.type === "paragraph" && t.content.some((u) => u.type === "image"),
+      ) && (await import("terminal-image")).default;
+    const table =
+      tokens.some((t) => t.type === "table") && (await import("table")).table;
+    //#region
+    for (const token of tokens) {
+      //#region switch token type
+      switch (token.type) {
+        //#region text
+        case "text":
+          const content = token.content;
+          contentStrings.push(chunksToAnsi(content.chunks));
+          break;
+        //#endregion
+        //#region paragraph
+        case "paragraph": {
+          const content = token.content;
+          const paragraphItems: string[] = [];
+          for (const element of content) {
+            if (element.type === "image") {
+              const image = element.content;
+              if (terminalImage) {
+                const buf = await image.imageBuffer;
+                paragraphItems.push(
+                  buf
+                    ? await terminalImage.buffer(buf)
+                    : chalk.gray(image.imageAlt),
+                );
+              }
+            } else if (element.type === "text") {
+              const text = chunksToAnsi(element.content.chunks);
+              paragraphItems.push(text);
+            }
+          }
+          contentStrings.push(...paragraphItems);
+          break;
+        }
+        //#endregion
+        //#region headings
+        case "heading":
+          const tokenContent: HeadingObject = token.content as HeadingObject;
+          if (args.values.noRenderHeadings) {
+            const colorMap: Record<number, (str: string) => string> = {
+              1: (str: string) => chalk.hex("#ffa50a")(str),
+              2: (str: string) => chalk.hex("#eeee00")(str),
+              3: (str: string) => chalk.hex("#0acadd")(str),
+              4: (str: string) => chalk.hex("#ffa5a5")(str),
+              5: (str: string) => chalk.hex("#22ff22")(str),
+              6: (str: string) => chalk.hex("#aaaaaa")(str),
+            };
+            const str = colorMap[tokenContent.level]!(
+              "#".repeat(tokenContent.level) + " " + tokenContent.text,
+            );
+            const heading = alignText(str, token.properties.align ?? "left");
+            contentStrings.push(heading);
+            if (tokenContent.links.chunks.length > 0) {
+              contentStrings.push(chunksToAnsi(tokenContent.links.chunks));
+            }
+            break;
+          }
+          const figletChars = await makeFigletFont(
+            tokenContent.text,
+            tokenContent.level,
+            token.properties.align ?? "left",
+          );
+          contentStrings.push(figletChars);
+          if (tokenContent.links.chunks.length > 0) {
+            contentStrings.push(chunksToAnsi(tokenContent.links.chunks));
+          }
+          break;
+        //#endregion
+        //#region table
+        case "table":
+          if (!table) break;
+          const cells = await Promise.all(
+            token.content.map(
+              async (row) =>
+                await Promise.all(
+                  row.map(async (cell) => await tokensToString(cell.content)),
+                ),
+            ),
+          );
+          const renderedTable = table(cells, {
+            border: {
+              topLeft: "╭",
+              topRight: "╮",
+              bottomRight: "╯",
+              bottomLeft: "╰",
+              topBody: `─`,
+              topJoin: `┬`,
+              bottomBody: `─`,
+              bottomJoin: `┴`,
+              bodyLeft: `│`,
+              bodyRight: `│`,
+              bodyJoin: `│`,
+              joinBody: `─`,
+              joinLeft: `├`,
+              joinRight: `┤`,
+              joinJoin: `┼`,
+            },
+          });
+          contentStrings.push(renderedTable);
+          break;
+        //#endregion
+        //#region bullet list
+        case "bullet_list":
+          const bp = "\u2022";
+          const bulletListItems = [];
+          for (const listItem of token.content) {
+            const transformedListItem = makeTaskList(listItem);
+            const renderedListContent = await tokensToString(
+              transformedListItem.content,
+              indent + 2,
+            );
+            bulletListItems.push(
+              renderedListContent
+                .split("\n")
+                .map((line, index) =>
+                  index === 0
+                    ? `${" ".repeat(indent)}${bp} ${line}`
+                    : `${" ".repeat(indent)}  ${line}`,
+                ),
+            );
+          }
+          contentStrings.push(bulletListItems.join("\n"));
+          break;
+        //#endregion
+        //#region ordered list
+        case "ordered_list":
+          let number = token.properties.start || 1;
+          const orderdListMarkerWidth = String(token.content.length).length;
+          const orderedListItems = [];
+          for (const listItem of token.content) {
+            const transformedListItem = makeTaskList(listItem);
+            const renderedListContent = await tokensToString(
+              transformedListItem.content,
+              indent + 2,
+            );
+            orderedListItems.push(
+              renderedListContent
+                .split("\n")
+                .map((line, index) =>
+                  index === 0
+                    ? `${indent}${String(index + number).padStart(orderdListMarkerWidth, "")}. ${line}`
+                    : `${indent}  ${line}`,
+                ),
+            );
+          }
+          contentStrings.push(orderedListItems.join("\n"));
+          break;
+        //#endregion
+        //#region blockquote
+        case "blockquote":
+          const uhb = "\u258c"; // unicode left half block
+          const blockquoteItems = [];
+          const renderedBlockquoteChildren = await tokensToString(
+            token.content,
+            indent + 2,
+          );
+          blockquoteItems.push(
+            renderedBlockquoteChildren
+              .split("\n")
+              .map((line) => `${uhb} ${line}`)
+              .join("\n"),
+          );
+          break;
+        //#endregion
+        //#region alerts
+        case "alert": {
+          const alertIcons: Record<
+            string,
+            { icon: string; color: string; name: string }
+          > = {
+            note: { icon: "\uf129", color: "#6af", name: "Note" },
+            tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
+            important: { icon: "\uf12a", color: "#96f", name: "Important" },
+            warning: { icon: "\uea6c", color: "#dd4", name: "Warning" },
+            caution: { icon: "\u{f0ce6}", color: "#f44", name: "Caution" },
+          };
+          const alertType = token.properties.alertType;
+          const alertIconAndColor = alertIcons[alertType];
+          const renderedAlertChildren = await tokensToString(
+            token.content,
+            indent + 2,
+          );
+          const uhb = chalk.hex(alertIconAndColor!.color)("\u258c"); // unicode left half block
+          contentStrings.push(
+            uhb
+            + chalk.hex(alertIconAndColor!.color)(
+              ` ${alertIconAndColor!.icon} ${alertIconAndColor!.name}`,
+            )
+            + "\n"
+            + renderedAlertChildren
+              .split("\n")
+              .map((line) => `${uhb} ${line}`)
+              .join("\n"),
+          );
+          break;
+        }
+        //#endregion
+        //#region code block
+        case "codeBlock":
+          const codeTokenContent = token.content as {
+            code: string;
+            language: string;
+          };
+          const language = codeTokenContent.language;
+          const icon =
+            languageToNerdFontIconMap[language]
+            ?? languageToNerdFontIconMap.default;
+          const languageLine = ` ${icon} ${language} `;
+          const boxWidth = Math.min(
+            Math.max(
+              ...codeTokenContent.code
+                .split("\n")
+                .map((line) => Bun.stringWidth(line)),
+              Bun.stringWidth(languageLine),
+            ) + 2,
+            parseInt(args.values.width) - 2,
+          );
+          const emptyLine = " ".repeat(boxWidth);
+          const code = codeTokenContent.code
+            .trim()
+            .split("\n")
+            .map(
+              (line) =>
+                " "
+                + line
+                + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 1),
+            )
+            .join("\n");
+          contentStrings.push(
+            chalk.bgHex("#181225")(
+              [
+                emptyLine,
+                `${languageLine}${" ".repeat(boxWidth - Bun.stringWidth(languageLine))}`,
+                emptyLine,
+                code,
+                emptyLine,
+              ].join("\n"),
+            ),
+          );
+          break;
+        //#endregion
+        //#region div
+        case "div":
+          contentStrings.push(await tokensToString(token.content));
+          break;
+        //#endregion
+        //#region details
+        case "details":
+          const detailsContent = token.content;
+          const summaryToken = detailsContent.find((t) => t.type === "summary");
+          const detailsToken = detailsContent.find((t) => t.type === "content");
+          contentStrings.push(
+            "\u25bc " + (await tokensToString(summaryToken!.content)),
+          );
+          contentStrings.push(await tokensToString(detailsToken!.content));
+          break;
+        //#endregion
+        //#region default
+        default:
+          console.warn("DEFAULT CASE:", token);
+          console.warn("args in current renderMarkdown() call:", tokens.length);
+        //#endregion
+      }
+      //#endregion
+    }
+    //#endregion
+    return contentStrings.join("\n\n");
+  }
+  if (!process.stdin.isTTY) {
+    const md = await Bun.stdin.text();
+    const tokens = await stylize(parseInput(md), "");
+    const content = await tokensToString(tokens);
+    process.stdout.write(
+      Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
+    );
+    process.exit(0);
+  } else {
+    const path = args.positionals.at(-1);
+    if (!path)
+      throw new Error(
+        "No path specified; specify a file with the syntax `remder <options> <path>",
+      );
+    const content = URL.canParse(path)
+      ? await got(path).text()
+      : await Bun.file(path).text();
+    const processedContent = await tokensToString(
+      await stylize(parseInput(content), path),
+    );
+    process.stdout.write(
+      Bun.wrapAnsi(processedContent, parseInt(args.values.width), {
+        trim: false,
+      }),
+    );
+    process.exit(0);
+  }
+}
+//#endregion
+
+//#region imports
+import { flushLogBuffer } from "./stylize.ts";
+import {
+  createCliRenderer,
+  Box,
+  Text,
+  Select,
+  type TextChunk,
+  ScrollBox,
+  RGBA,
+  createTextAttributes,
+  StyledText,
+  KeyEvent,
+  type BoxOptions,
+  BoxRenderable,
+  type TextOptions,
+  ScrollBoxRenderable,
+  SelectRenderable,
+  Renderable,
+  TextRenderable,
+  type RenderContext,
+  type BorderSides,
+  RenderableEvents,
+  TextAttributes,
+} from "@opentui/core";
+import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import chalk from "chalk";
+import { readdir, stat } from "node:fs/promises";
+import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
+import { openSync } from "node:fs";
+import type { FontName } from "figlet";
+//#endregion
+
 const colorPalette = createColorPalette();
 
 const headingsArrayForToc: {
@@ -304,77 +747,6 @@ const ansiToTextToken = (text: string, ctx: RenderContext, id?: string) => {
 };
 //#endregion
 
-async function makeFigletFont(text: string, level: number) {
-  const figlet = (await import("figlet")).default;
-  figlet.parseFont(
-    "Calvin S Modified",
-    await Bun.file(`${import.meta.dir}/fonts/calvin-s.flf`).text(),
-  );
-  const fontsList: Record<number, FontName> = {
-    1: "ANSI Regular",
-    2: "Coder Mini",
-    3: "ANSI Compact",
-    4: "Small",
-    5: "miniwi",
-    6: "Calvin S Modified",
-  };
-  return text
-    .trim()
-    .split("")
-    .map((char) =>
-      figlet.textSync(char, {
-        font: fontsList[level],
-        width: parseInt(args.values.width),
-      }),
-    );
-}
-
-function makeTaskList(item: ProcessedToken) {
-  if (item.type !== "list_item") throw new Error("");
-  const content: ProcessedToken[] = [];
-  for (const child of item.content as ProcessedToken[]) {
-    switch (child.type) {
-      case "paragraph":
-        child.content.forEach((text) => {
-          if (text.type === "text") {
-            const startsWith =
-              text.content.chunks[0]?.text.match(/^\[[ xX]\]\s*/);
-            if (startsWith?.[0]) {
-              text.content.chunks[0]!.text =
-                text.content.chunks[0]!.text.replace(startsWith[0], " ");
-              text.content.chunks.unshift({
-                __isChunk: true,
-                text:
-                  startsWith?.[0].trim().toLowerCase() === "[x]"
-                    ? " \uf00c "
-                    : "   ",
-                bg: RGBA.fromHex("#808080"),
-              });
-            }
-            content.push({
-              ...text,
-              content: text.content,
-            });
-          } else {
-            content.push(text);
-          }
-        });
-        break;
-      case "bullet_list":
-        content.push({
-          ...child,
-          content: Array.isArray(child.content)
-            ? child.content.map((t) => makeTaskList(t))
-            : child.content,
-        });
-        break;
-      default:
-        content.push(child);
-    }
-  }
-  return { ...item, content };
-}
-
 async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
   if (tableToken.type !== "table")
     throw new Error(
@@ -386,8 +758,8 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
     gap: 0,
   });
   const maxCellWidth = Math.round(
-    ((ctx.terminalWidth ?? 80) - 2) /
-    Math.max(...tableToken.content.map((arr) => arr.length)),
+    ((ctx.terminalWidth ?? 80) - 2)
+    / Math.max(...tableToken.content.map((arr) => arr.length)),
   );
   const maxCellContentWidth =
     Math.max(
@@ -491,91 +863,8 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
         row.getChildren().forEach((cell) => (cell.width = cellWidth)),
       );
   }
-  // console.log("TABLE:");
-  // rows.forEach((cells) => cells.forEach((cell) => console.log(cell)));
-  // console.log("TABLE ORIGINAL CONTENT:");
-  // console.log(tableToken.content);
   return table;
 }
-
-// NOTE: chatgpt made a prototype of this
-// TODO: finish this soon
-// async function tokensToString(
-//   tokens: ProcessedToken[],
-//   isRecursing?: boolean,
-// ): Promise<string> {
-//   return (
-//     await Promise.all(
-//       tokens.map(async (token): Promise<string> => {
-//         if (typeof token.content === "string") {
-//           return token.content
-//             .split("\n")
-//             .map((line) => line.trim())
-//             .filter((line) => line.length > 0)
-//             .join("\n");
-//         } else if (token.type === "image") {
-//           return args.values.noRenderImages
-//             ? await token.content.render()
-//             : chalk.dim(token.content.imageAlt);
-//         } else if (
-//           Array.isArray(token.content) &&
-//           !token.content.every((arr) => Array.isArray(arr))
-//         ) {
-//           if (token.type === "bullet_list") {
-//             let str = "";
-//             for (const child of token.content as ProcessedToken[]) {
-//               if (child.type !== "list_item") throw new Error("Huh?");
-//               str += `\u2022 ${await tokensToString(child.content)}\n`;
-//             }
-//             return str;
-//           } else if (token.type === "ordered_list") {
-//             let number = token.properties.start || 1;
-//             let str = "";
-//             for (const child of token.content) {
-//               const content = Array.isArray(child) ? child : child.content;
-//               str += `${number}. ${await tokensToString(content)}\n`;
-//               number++;
-//             }
-//             return str;
-//           } else if (token.type === "blockquote") {
-//             let str = "";
-//             for (const child of token.content) {
-//               if (Array.isArray(child)) continue;
-//               const blockquoteContent = await tokensToString(
-//                 isRecursing
-//                   ? [child]
-//                   : (child.content as (ProcessedToken | Image)[]),
-//                 true,
-//               );
-//               str += `\u258c ${blockquoteContent
-//                 .split("\n")
-//                 .map((line) => line.trim())
-//                 .filter((line) => line.length > 0)
-//                 .join("\n\u258c ")}\n`;
-//             }
-//             return str;
-//           } else {
-//             return await tokensToString(token.content);
-//           }
-//         } else if (
-//           typeof token.content === "object" &&
-//           "code" in token.content
-//         ) {
-//           return token.content.code;
-//         } else if (
-//           typeof token.content === "object" &&
-//           !("imageAlt" in token.content) &&
-//           token.type === "heading"
-//         ) {
-//           let str = "";
-//           const tokenContent = token.content as HeadingObject;
-//           return str;
-//         }
-//         return "";
-//       }),
-//     )
-//   ).join("\n");
-// }
 
 export async function renderMarkdown(
   tokens: ProcessedToken[],
@@ -713,8 +1002,14 @@ export async function renderMarkdown(
           flexWrap: "wrap",
           alignSelf: token.properties.align ?? "left",
         });
-        (await makeFigletFont(tokenContent.text, tokenContent.level)).forEach(
-          (char) => heading.add(Text({ content: char, flexShrink: 0 })),
+        heading.add(
+          new TextRenderable(ctx, {
+            content: await makeFigletFont(
+              tokenContent.text,
+              tokenContent.level,
+              "left",
+            ),
+          }),
         );
         componentArray.push(heading);
         if (tokenContent.links.chunks.length > 0) {
@@ -745,14 +1040,6 @@ export async function renderMarkdown(
           alignItems: token.properties.align ?? "left",
         });
         for (const listItem of token.content) {
-          if (listItem.type !== "list_item")
-            throw new Error(
-              `Expected type "list_item" but got ${listItem.type}`,
-            );
-          if (!Array.isArray(listItem.content))
-            throw new Error(
-              `The contents of this list item were somehow not an array.`,
-            );
           const transformedListItem = makeTaskList(listItem);
           const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(listContent.flat(), ctx);
@@ -900,8 +1187,8 @@ export async function renderMarkdown(
         };
         const language = codeTokenContent.language;
         const icon =
-          languageToNerdFontIconMap[language] ??
-          languageToNerdFontIconMap.default;
+          languageToNerdFontIconMap[language]
+          ?? languageToNerdFontIconMap.default;
         const box = new BoxRenderable(ctx, {
           paddingLeft: 2,
           paddingRight: 2,
@@ -1067,17 +1354,6 @@ if (process.platform === "win32") {
   args.values.printToStdout = true;
 }
 
-// TODO: uncomment when you're done with `tokensToString`
-// if (!process.stdin.isTTY && args.values.printToStdout) {
-//   const md = await Bun.stdin.text();
-//   const tokens = await stylize(parseInput(md), "");
-//   const content = await tokensToString(tokens);
-//   console.log(
-//     Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
-//   );
-//   process.exit(0);
-// }
-
 const terminalInput = process.stdin.isTTY
   ? process.stdin
   : new (await import("node:tty")).ReadStream(openSync("/dev/tty", "r+"));
@@ -1213,8 +1489,8 @@ keymap.registerLayer({
       run() {
         if (!detailsElementsIndex) detailsElementsIndex = 0;
         detailsElementsIndex =
-          (detailsElementsIndex - 1 + detailsElementsArray.length) %
-          detailsElementsArray.length;
+          (detailsElementsIndex - 1 + detailsElementsArray.length)
+          % detailsElementsArray.length;
         const detailsElement = detailsElementsArray.at(detailsElementsIndex);
         console.log(
           `pressed previous details. current index is ${detailsElementsIndex}`,
@@ -1275,8 +1551,8 @@ keymap.registerLayer({
       run() {
         if (headingsArrayForToc.length > 0) {
           headingIndexForToc =
-            (headingIndexForToc - 1 + headingsArrayForToc.length) %
-            headingsArrayForToc.length;
+            (headingIndexForToc - 1 + headingsArrayForToc.length)
+            % headingsArrayForToc.length;
           const id = headingsArrayForToc[headingIndexForToc]?.id;
           if (!id) return;
           const heading = root.findDescendantById(id);
@@ -1509,8 +1785,8 @@ renderer.on("frame", () => {
 function syncToC() {
   if (headingsArrayForToc.length === 0) return;
   if (
-    contentScrollBox.scrollTop >=
-    Math.max(
+    contentScrollBox.scrollTop
+    >= Math.max(
       0,
       contentScrollBox.scrollHeight - contentScrollBox.viewport.height,
     )

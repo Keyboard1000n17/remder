@@ -472,7 +472,7 @@ if (args.values.printToStdout) {
         //#endregion
         //#region ordered list
         case "ordered_list":
-          let number = token.properties.start || 1;
+          let number = parseInt(token.properties.start) || 1;
           const orderdListMarkerWidth = String(token.content.length).length;
           const orderedListItems = [];
           for (const listItem of token.content) {
@@ -486,7 +486,7 @@ if (args.values.printToStdout) {
                 .split("\n")
                 .map((line, index) =>
                   index === 0
-                    ? `${indent}${String(index + number).padStart(orderdListMarkerWidth, "")}. ${line}`
+                    ? `${indent}${String(number++).padStart(orderdListMarkerWidth, "0")}. ${line}`
                     : `${indent}  ${line}`,
                 ),
             );

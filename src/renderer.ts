@@ -650,9 +650,7 @@ import {
   createCliRenderer,
   Box,
   Text,
-  Select,
   type TextChunk,
-  ScrollBox,
   RGBA,
   createTextAttributes,
   StyledText,
@@ -668,6 +666,8 @@ import {
   type BorderSides,
   RenderableEvents,
   TextAttributes,
+  SelectRenderableEvents,
+  type SelectOption,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import chalk from "chalk";
@@ -1324,36 +1324,7 @@ export async function renderMarkdown(
   return componentArray;
 }
 
-//#region file menu
-const fileNames = (await readdir(".", { recursive: true, withFileTypes: true }))
-  .filter((file) => file.isFile() && file.name.endsWith(".md"))
-  .map((file) =>
-    file.parentPath.length > 0
-      ? [file.parentPath, file.name].join("/")
-      : file.name,
-  );
-const optionsArray = [];
-for (const file of fileNames) {
-  let birthTime = "";
-  try {
-    birthTime = new Date((await stat(file)).birthtime).toDateString();
-  } catch (err) {
-    birthTime = "unknown";
-  }
-  optionsArray.push({ name: file, description: `Created at: ${birthTime}` });
-}
-const menu = Select({
-  options: optionsArray,
-  width: "100%",
-  height: "100%",
-});
-//#endregion
-
-//#region handle stdin on windows
-if (process.platform === "win32") {
-  args.values.printToStdout = true;
-}
-
+//#region handle stdin
 const terminalInput = process.stdin.isTTY
   ? process.stdin
   : new (await import("node:tty")).ReadStream(openSync("/dev/tty", "r+"));
@@ -1378,9 +1349,54 @@ const root = new BoxRenderable(renderer, {
   width: "100%",
   height: "100%",
   flexDirection: "row",
-  live: true,
 });
 renderer.root.add(root);
+
+//#region file menu
+const fileNames = (await readdir(".", { recursive: true, withFileTypes: true }))
+  .filter((file) => file.isFile() && file.name.endsWith(".md"))
+  .map((file) =>
+    file.parentPath.length > 0
+      ? [file.parentPath, file.name].join("/")
+      : file.name,
+  );
+const optionsArray = [];
+for (const file of fileNames) {
+  let birthTime = "";
+  try {
+    birthTime = new Date((await stat(file)).birthtime).toDateString();
+  } catch (err) {
+    birthTime = "unknown";
+  }
+  optionsArray.push({
+    name: file,
+    description: `\tCreated at: ${birthTime}`,
+    value: file,
+  });
+}
+const menu = new SelectRenderable(renderer, {
+  options: optionsArray,
+  width: "100%",
+  height: "100%",
+  id: "menu",
+  focusedBackgroundColor: "transparent",
+  selectedBackgroundColor: "transparent",
+  selectedTextColor: RGBA.fromHex("#fff"),
+  focusedTextColor: RGBA.fromHex("#aaa"),
+});
+menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
+  const content = await Bun.file(opt.value).text();
+  const rendered = await stylize(parseInput(content), opt.value);
+  (await renderMarkdown(rendered, renderer)).forEach((renderable) =>
+    contentScrollBox.add(renderable),
+  );
+  contentScrollBox.focus();
+  root.add(contentScrollBox);
+  menu.visible = false;
+});
+//#endregion
+
+let focusedElement: "content" | "menu" | null = null;
 
 const contentScrollBoxOpts = {
   width: "auto" as "auto",
@@ -1395,59 +1411,10 @@ const contentScrollBoxOpts = {
     paddingLeft: 1,
   },
 };
-
-if (args.positionals.length > 0) {
-  //#region handle supplied file
-  const filePath = args.positionals.at(-1);
-  let fileContent = "";
-  if (URL.canParse(filePath!)) {
-    fileContent = await got(filePath!).text();
-  } else {
-    try {
-      fileContent = await Bun.file(filePath!).text();
-    } catch (err) {
-      throw new Error(`Encountered an error: ${err}`);
-    }
-  }
-  const tokens = await stylize(parseInput(fileContent), filePath || "");
-  console.log(filePath);
-  if (args.values.printToStdout) {
-    renderer.destroy();
-    // TODO: uncomment when you're done with the `tokensToString` function
-    // const content = await tokensToString(tokens);
-    // console.log(
-    //   Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
-    // );
-    process.exit(0);
-  } else {
-    const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
-    const renderables = await renderMarkdown(
-      tokens as ProcessedToken[],
-      renderer,
-    );
-    renderables.forEach((renderable) => {
-      box.add(renderable);
-    });
-    box.focus();
-    root.add(box);
-  }
-  //#endregion
-} else if (!process.stdin.isTTY) {
-  //#region handle piped input on non-windows systems
-  const md = await Bun.stdin.text();
-  const tokens = await stylize(parseInput(md), "");
-  const renderables = await renderMarkdown(
-    tokens as ProcessedToken[],
-    renderer,
-  );
-  const box = ScrollBox(contentScrollBoxOpts, renderables);
-  box.focus();
-  root.add(box);
-  //#endregion
-} else {
-  menu.focus();
-  root.add(menu);
-}
+const contentScrollBox = new ScrollBoxRenderable(
+  renderer,
+  contentScrollBoxOpts,
+);
 
 const keymap = createDefaultOpenTuiKeymap(renderer);
 keymap.registerLayer({
@@ -1465,10 +1432,14 @@ keymap.registerLayer({
     {
       name: "app.down",
       run() {
-        (
-          root.findDescendantById(`root-scrollbox`) as
-          ScrollBoxRenderable | undefined
-        )?.scrollBy(1);
+        focusedElement === "content"
+          ? (
+            root.findDescendantById(`root-scrollbox`) as
+            ScrollBoxRenderable | undefined
+          )?.scrollBy(1)
+          : (
+            root.findDescendantById(`menu`) as SelectRenderable | undefined
+          )?.moveDown();
       },
     },
     //#endregion
@@ -1476,10 +1447,14 @@ keymap.registerLayer({
     {
       name: "app.up",
       run() {
-        (
-          root.findDescendantById(`root-scrollbox`) as
-          ScrollBoxRenderable | undefined
-        )?.scrollBy(-1);
+        focusedElement === "content"
+          ? (
+            root.findDescendantById(`root-scrollbox`) as
+            ScrollBoxRenderable | undefined
+          )?.scrollBy(-1)
+          : (
+            root.findDescendantById(`menu`) as SelectRenderable | undefined
+          )?.moveUp();
       },
     },
     //#endregion
@@ -1558,13 +1533,11 @@ keymap.registerLayer({
           const heading = root.findDescendantById(id);
           const y = heading?.y;
           if (y === undefined || !heading) return;
-          process.nextTick(() =>
-            contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
-          );
+          process.nextTick(() => {
+            if (contentScrollBox)
+              contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
+          });
           tocMenu.setSelectedIndex(headingIndexForToc);
-          console.log(
-            `prev heading / scrolled to ${heading.y + contentScrollBox.scrollTop}`,
-          );
         }
       },
     },
@@ -1579,14 +1552,15 @@ keymap.registerLayer({
           const heading = root.findDescendantById(id);
           const y = heading?.y;
           if (y === undefined || !heading) return;
-          process.nextTick(() =>
-            contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop),
-          );
+          process.nextTick(() => {
+            if (contentScrollBox)
+              contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
+          });
           tocMenu.setSelectedIndex(headingIndexForToc);
           headingIndexForToc =
             (headingIndexForToc + 1) % headingsArrayForToc.length;
           console.log(
-            `next heading / scrolled to ${heading.y + contentScrollBox.scrollTop}`,
+            `next heading / scrolled to ${contentScrollBox ? heading.y + contentScrollBox?.scrollTop : undefined}`,
           );
         }
       },
@@ -1604,7 +1578,7 @@ keymap.registerLayer({
     {
       name: "content.goToTop",
       run() {
-        contentScrollBox.scrollTo(0);
+        contentScrollBox?.scrollTo(0);
       },
     },
     //#endregion
@@ -1612,7 +1586,7 @@ keymap.registerLayer({
     {
       name: "content.goToBottom",
       run() {
-        contentScrollBox.scrollTo(contentScrollBox.scrollHeight);
+        contentScrollBox?.scrollTo(contentScrollBox.scrollHeight);
       },
     },
     //#endregion
@@ -1634,6 +1608,45 @@ keymap.registerLayer({
     { key: "shift+g", cmd: "content.goToBottom" },
   ],
 });
+
+if (args.positionals.length > 0) {
+  //#region handle supplied file
+  const filePath = args.positionals.at(-1);
+  let fileContent = "";
+  if (URL.canParse(filePath!)) {
+    fileContent = await got(filePath!).text();
+  } else {
+    try {
+      fileContent = await Bun.file(filePath!).text();
+    } catch (err) {
+      throw new Error(`Encountered an error: ${err}`);
+    }
+  }
+  const tokens = await stylize(parseInput(fileContent), filePath || "");
+  const renderables = await renderMarkdown(tokens, renderer);
+  renderables.forEach((renderable) => {
+    contentScrollBox.add(renderable);
+  });
+  contentScrollBox.focus();
+  focusedElement = "content";
+  root.add(contentScrollBox);
+  //#endregion
+} else if (!process.stdin.isTTY) {
+  //#region handle piped input on non-windows systems
+  const md = await Bun.stdin.text();
+  const tokens = await stylize(parseInput(md), "");
+  const renderables = await renderMarkdown(tokens, renderer);
+  const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
+  renderables.forEach((renderable) => box.add(renderable));
+  box.focus();
+  focusedElement = "content";
+  root.add(box);
+  //#endregion
+} else {
+  menu.focus();
+  focusedElement = "menu";
+  root.add(menu);
+}
 
 //#region bottom bar + opts
 const bottomBarOpts: BoxOptions<BoxRenderable> = {
@@ -1769,21 +1782,18 @@ tocBox.add(tocMenu);
 root.add(tocBox);
 //#endregion
 
-const contentScrollBox = root.findDescendantById(
-  "root-scrollbox",
-) as ScrollBoxRenderable;
-
 //#region sync toc and scrollbox
 // when you scroll, this is the code that updates the toc with the heading
-let lastScrollTop = contentScrollBox.scrollTop;
+let lastScrollTop = contentScrollBox?.scrollTop;
 renderer.on("frame", () => {
+  if (!contentScrollBox) return;
   const scrollTop = contentScrollBox.scrollTop;
   if (scrollTop === lastScrollTop) return;
   syncToC();
   lastScrollTop = scrollTop;
 });
 function syncToC() {
-  if (headingsArrayForToc.length === 0) return;
+  if (headingsArrayForToc.length === 0 || !contentScrollBox) return;
   if (
     contentScrollBox.scrollTop
     >= Math.max(
@@ -1797,6 +1807,7 @@ function syncToC() {
     }
     return;
   }
+  // binary search!
   let low = 0;
   let high = headingsArrayForToc.length - 1;
   let activeIndex = 0;

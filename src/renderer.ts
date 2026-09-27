@@ -675,6 +675,7 @@ import { readdir, stat } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
 import type { FontName } from "figlet";
+import { machine } from "node:os";
 //#endregion
 
 const colorPalette = createColorPalette();
@@ -1383,6 +1384,7 @@ const menu = new SelectRenderable(renderer, {
   selectedBackgroundColor: "transparent",
   selectedTextColor: RGBA.fromHex("#fff"),
   focusedTextColor: RGBA.fromHex("#aaa"),
+  textColor: RGBA.fromHex("#aaa"),
 });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   const content = await Bun.file(opt.value).text();
@@ -1393,6 +1395,7 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   contentScrollBox.focus();
   root.add(contentScrollBox);
   menu.visible = false;
+  console.log(`selected option "${opt.name}`);
 });
 //#endregion
 
@@ -1590,6 +1593,19 @@ keymap.registerLayer({
       },
     },
     //#endregion
+    //#region go to file menu
+    {
+      name: "app.goToFileMenu",
+      run() {
+        contentScrollBox
+          .getChildren()
+          .forEach((child) => contentScrollBox.remove(child));
+        root.remove(contentScrollBox);
+        menu.visible = true;
+        menu.focus();
+      },
+    },
+    //#endregion
   ],
   bindings: [
     { key: "q", cmd: "app.quit" },
@@ -1606,6 +1622,7 @@ keymap.registerLayer({
     { key: "shift+t", cmd: "app.toc" },
     { key: "g", cmd: "content.goToTop" },
     { key: "shift+g", cmd: "content.goToBottom" },
+    { key: "escape", cmd: "app.goToFileMenu" },
   ],
 });
 

@@ -1596,6 +1596,7 @@ keymap.registerLayer({
         root.remove(contentScrollBox);
         menu.visible = true;
         menu.focus();
+        focusedElement = "menu";
       },
     },
     //#endregion

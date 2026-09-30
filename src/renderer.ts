@@ -671,11 +671,10 @@ import {
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import chalk from "chalk";
-import { readdir, stat } from "node:fs/promises";
+import { stat, glob } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
 import type { FontName } from "figlet";
-import { machine } from "node:os";
 //#endregion
 
 const colorPalette = createColorPalette();
@@ -1354,15 +1353,8 @@ const root = new BoxRenderable(renderer, {
 renderer.root.add(root);
 
 //#region file menu
-const fileNames = (await readdir(".", { recursive: true, withFileTypes: true }))
-  .filter((file) => file.isFile() && file.name.endsWith(".md"))
-  .map((file) =>
-    file.parentPath.length > 0
-      ? [file.parentPath, file.name].join("/")
-      : file.name,
-  );
 const optionsArray = [];
-for (const file of fileNames) {
+for await (const file of glob("**/*.md", {})) {
   let birthTime = "";
   try {
     birthTime = new Date((await stat(file)).birthtime).toDateString();
@@ -1392,8 +1384,9 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   (await renderMarkdown(rendered, renderer)).forEach((renderable) =>
     contentScrollBox.add(renderable),
   );
-  contentScrollBox.focus();
   root.add(contentScrollBox);
+  contentScrollBox.focus();
+  focusedElement = "content";
   menu.visible = false;
   console.log(`selected option "${opt.name}`);
 });

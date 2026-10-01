@@ -1358,7 +1358,7 @@ renderer.root.add(root);
 const homeRenderable = new BoxRenderable(renderer, {
   width: "100%",
   height: "100%",
-  flexDirection: "row",
+  flexDirection: "column",
 });
 const noFilesFoundText = new TextRenderable(renderer, {
   content: "No files found",
@@ -1366,6 +1366,11 @@ const noFilesFoundText = new TextRenderable(renderer, {
   visible: false,
   width: "100%",
 });
+homeRenderable.add(
+  new TextRenderable(renderer, {
+    content: await makeFigletFont("remder", 1, "left"),
+  }),
+);
 homeRenderable.add(noFilesFoundText);
 root.add(homeRenderable);
 
@@ -1387,7 +1392,7 @@ for await (const file of glob("**/*.md", {})) {
 const menu = new SelectRenderable(renderer, {
   options: optionsArray,
   width: "100%",
-  // height: "100%",
+  flexGrow: 1,
   id: "menu",
   focusedBackgroundColor: "transparent",
   selectedBackgroundColor: "transparent",

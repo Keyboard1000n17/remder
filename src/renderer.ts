@@ -668,8 +668,11 @@ import {
   TextAttributes,
   SelectRenderableEvents,
   type SelectOption,
+  InputRenderable,
+  InputRenderableEvents,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
+import fuzzysort from "fuzzysort";
 import chalk from "chalk";
 import { stat, glob } from "node:fs/promises";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
@@ -1352,6 +1355,20 @@ const root = new BoxRenderable(renderer, {
 });
 renderer.root.add(root);
 
+const homeRenderable = new BoxRenderable(renderer, {
+  width: "100%",
+  height: "100%",
+  flexDirection: "row",
+});
+const noFilesFoundText = new TextRenderable(renderer, {
+  content: "No files found",
+  fg: RGBA.fromHex("#888"),
+  visible: false,
+  width: "100%",
+});
+homeRenderable.add(noFilesFoundText);
+root.add(homeRenderable);
+
 //#region file menu
 const optionsArray = [];
 for await (const file of glob("**/*.md", {})) {
@@ -1370,7 +1387,7 @@ for await (const file of glob("**/*.md", {})) {
 const menu = new SelectRenderable(renderer, {
   options: optionsArray,
   width: "100%",
-  height: "100%",
+  // height: "100%",
   id: "menu",
   focusedBackgroundColor: "transparent",
   selectedBackgroundColor: "transparent",
@@ -1378,6 +1395,8 @@ const menu = new SelectRenderable(renderer, {
   focusedTextColor: RGBA.fromHex("#aaa"),
   textColor: RGBA.fromHex("#aaa"),
 });
+homeRenderable.add(menu);
+const fuzzysortSnapshot = fuzzysort.snapshot(optionsArray, { key: "value" });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   const content = await Bun.file(opt.value).text();
   const rendered = await stylize(parseInput(content), opt.value);
@@ -1387,7 +1406,7 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   root.add(contentScrollBox);
   contentScrollBox.focus();
   focusedElement = "content";
-  menu.visible = false;
+  homeRenderable.visible = false;
   console.log(`selected option "${opt.name}`);
 });
 //#endregion
@@ -1412,8 +1431,52 @@ const contentScrollBox = new ScrollBoxRenderable(
   contentScrollBoxOpts,
 );
 
+const searchBox = new InputRenderable(renderer, {
+  flexGrow: 1,
+  backgroundColor: "transparent",
+  textColor: RGBA.fromHex("#fff"),
+});
+
+const searchRow = new BoxRenderable(renderer, {
+  visible: false,
+  position: "absolute",
+  bottom: 0,
+  left: 0,
+  width: "100%",
+  backgroundColor: "#888",
+  flexDirection: "row",
+});
+searchRow.add(
+  new TextRenderable(renderer, {
+    content: new StyledText([
+      { __isChunk: true, text: "/", fg: RGBA.fromHex("#fff") },
+    ]),
+  }),
+);
+searchRow.add(searchBox);
+root.add(searchRow);
+
+searchBox.on(InputRenderableEvents.INPUT, (val: string) => {
+  const results = fuzzysort
+    .go(val, fuzzysortSnapshot, { limit: Infinity })
+    .map((result) => result.obj);
+  menu.options = results;
+  noFilesFoundText.visible = results.length === 0;
+});
+searchBox.on(InputRenderableEvents.ENTER, (val: string) => {
+  searchRow.visible = false;
+  bottomBar.visible = true;
+  const results = fuzzysort
+    .go(val, fuzzysortSnapshot, { limit: Infinity })
+    .map((result) => result.obj);
+  menu.options = results;
+  menu.focus();
+  noFilesFoundText.visible = results.length === 0;
+});
+
 const keymap = createDefaultOpenTuiKeymap(renderer);
 keymap.registerLayer({
+  // target: root,
   commands: [
     //#region quit
     {
@@ -1433,9 +1496,7 @@ keymap.registerLayer({
             root.findDescendantById(`root-scrollbox`) as
             ScrollBoxRenderable | undefined
           )?.scrollBy(1)
-          : (
-            root.findDescendantById(`menu`) as SelectRenderable | undefined
-          )?.moveDown();
+          : menu?.moveDown();
       },
     },
     //#endregion
@@ -1448,9 +1509,7 @@ keymap.registerLayer({
             root.findDescendantById(`root-scrollbox`) as
             ScrollBoxRenderable | undefined
           )?.scrollBy(-1)
-          : (
-            root.findDescendantById(`menu`) as SelectRenderable | undefined
-          )?.moveUp();
+          : menu?.moveUp();
       },
     },
     //#endregion
@@ -1458,6 +1517,7 @@ keymap.registerLayer({
     {
       name: "content.prevDetails",
       run() {
+        if (focusedElement !== "content") return;
         if (!detailsElementsIndex) detailsElementsIndex = 0;
         detailsElementsIndex =
           (detailsElementsIndex - 1 + detailsElementsArray.length)
@@ -1482,6 +1542,7 @@ keymap.registerLayer({
     {
       name: "content.nextDetails",
       run() {
+        if (focusedElement !== "content") return;
         if (!detailsElementsIndex) detailsElementsIndex = -1;
         detailsElementsIndex =
           (detailsElementsIndex + 1) % detailsElementsArray.length;
@@ -1574,7 +1635,9 @@ keymap.registerLayer({
     {
       name: "content.goToTop",
       run() {
-        contentScrollBox?.scrollTo(0);
+        focusedElement === "content"
+          ? contentScrollBox?.scrollTo(0)
+          : menu.setSelectedIndex(0);
       },
     },
     //#endregion
@@ -1582,7 +1645,9 @@ keymap.registerLayer({
     {
       name: "content.goToBottom",
       run() {
-        contentScrollBox?.scrollTo(contentScrollBox.scrollHeight);
+        focusedElement === "content"
+          ? contentScrollBox?.scrollTo(contentScrollBox.height)
+          : menu.setSelectedIndex(menu.options.length - 1);
       },
     },
     //#endregion
@@ -1594,9 +1659,21 @@ keymap.registerLayer({
           .getChildren()
           .forEach((child) => contentScrollBox.remove(child));
         root.remove(contentScrollBox);
-        menu.visible = true;
+        homeRenderable.visible = true;
         menu.focus();
         focusedElement = "menu";
+        searchRow.visible = false;
+        bottomBar.visible = true; // just in case search is open
+      },
+    },
+    //#endregion
+    //#region fuzzy search files
+    {
+      name: "menu.fuzzySearch",
+      run() {
+        searchRow.visible = !searchRow.visible;
+        if (searchRow.visible) searchBox.focus();
+        bottomBar.visible = !bottomBar.visible;
       },
     },
     //#endregion
@@ -1617,6 +1694,7 @@ keymap.registerLayer({
     { key: "g", cmd: "content.goToTop" },
     { key: "shift+g", cmd: "content.goToBottom" },
     { key: "escape", cmd: "app.goToFileMenu" },
+    { key: "/", cmd: "menu.fuzzySearch" },
   ],
 });
 
@@ -1654,9 +1732,9 @@ if (args.positionals.length > 0) {
   root.add(box);
   //#endregion
 } else {
-  menu.focus();
+  homeRenderable.focus();
   focusedElement = "menu";
-  root.add(menu);
+  root.add(homeRenderable);
 }
 
 //#region bottom bar + opts

@@ -1359,6 +1359,7 @@ const homeRenderable = new BoxRenderable(renderer, {
   width: "100%",
   height: "100%",
   flexDirection: "column",
+  visible: false,
 });
 const noFilesFoundText = new TextRenderable(renderer, {
   content: "No files found",
@@ -1737,9 +1738,10 @@ if (args.positionals.length > 0) {
   root.add(box);
   //#endregion
 } else {
-  homeRenderable.focus();
+  menu.focus();
   focusedElement = "menu";
   root.add(homeRenderable);
+  homeRenderable.visible = true;
 }
 
 //#region bottom bar + opts

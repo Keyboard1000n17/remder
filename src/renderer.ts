@@ -803,7 +803,7 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
         border: borders,
         width: cellWidth,
         flexShrink: 1,
-        paddingX: 1,
+        padding: 1,
         customBorderChars: {
           topLeft: isFirstRow && isFirstColumn ? "╭" : "┼",
           topRight: isFirstRow ? (isLastColumn ? "╮" : "┬") : "┼",

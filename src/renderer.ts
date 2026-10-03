@@ -1652,7 +1652,7 @@ keymap.registerLayer({
       name: "content.goToBottom",
       run() {
         focusedElement === "content"
-          ? contentScrollBox?.scrollTo(contentScrollBox.height)
+          ? contentScrollBox?.scrollTo(contentScrollBox.scrollHeight)
           : menu.setSelectedIndex(menu.options.length - 1);
       },
     },

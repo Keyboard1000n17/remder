@@ -69,8 +69,8 @@ if (args.values.help) {
 }
 //#endregion
 
-import parseInput from "./parse-input.ts";
-import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.ts";
+import parseInput from "./parse-input";
+import stylize, { type HeadingObject, type ProcessedToken } from "./stylize";
 import got from "got";
 // these three are imported beforehand because they are required in the tokensToString function which is defined towards the start
 
@@ -645,7 +645,7 @@ if (args.values.printToStdout) {
 //#endregion
 
 //#region imports
-import { flushLogBuffer } from "./stylize.ts";
+import { flushLogBuffer } from "./stylize";
 import {
   createCliRenderer,
   Box,

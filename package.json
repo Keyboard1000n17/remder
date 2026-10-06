@@ -1,8 +1,16 @@
 {
   "name": "remder",
+  "description": "Polished markdown renderer for the terminal",
+  "license": "GPL-3.0-or-later",
   "module": "index.js",
   "type": "module",
-  "private": true,
+  "private": false,
+  "keywords": [
+    "markdown",
+    "markdown-it",
+    "tui",
+    "cli"
+  ],
   "devDependencies": {
     "@types/bun": "^1.4.2",
     "@types/markdown-it-emoji": "^3.0.1",

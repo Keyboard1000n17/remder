@@ -1044,18 +1044,21 @@ export async function renderMarkdown(
         for (const listItem of token.content) {
           const transformedListItem = makeTaskList(listItem);
           const listContent = transformedListItem.content;
-          const listRenderables = await renderMarkdown(listContent.flat(), ctx);
-          for (const listRenderable of listRenderables) {
-            bulletListbox.add(Box({}, listRenderable));
-          }
+          const listRenderables = await renderMarkdown(listContent, ctx);
+          listRenderables.forEach((listRenderable, index) => {
+            bulletListbox.add(
+              Box(
+                {
+                  flexDirection: "row",
+                  gap: 1,
+                },
+                Text({ content: index === 0 ? bp : " " }),
+                Box({}, listRenderable),
+              ),
+            );
+          });
         }
-        const bulletListBoxWithBp = new BoxRenderable(renderer, {
-          flexDirection: "row",
-          columnGap: 1,
-        });
-        bulletListBoxWithBp.add(Text({ content: bp }));
-        bulletListBoxWithBp.add(bulletListbox);
-        componentArray.push(bulletListBoxWithBp);
+        componentArray.push(bulletListbox);
         break;
       //#endregion
       //#region ordered list

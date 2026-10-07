@@ -291,9 +291,9 @@ export class Image {
     const getImageSize = (await import("image-size")).imageSize;
     const imageSize = getImageSize(tempBuf!);
     const cellAspectRatio =
-      (ctx.resolution?.height || 1920) /
-      (ctx.terminalHeight || 25) /
-      ((ctx.resolution?.width || 1080) / (ctx.terminalWidth || 80));
+      (ctx.resolution?.height || 1920)
+      / (ctx.terminalHeight || 25)
+      / ((ctx.resolution?.width || 1080) / (ctx.terminalWidth || 80));
     logger.info(`image type: ${imageSize.type}`);
     const rowHeight =
       (ctx.resolution?.height || 1080) / (ctx.terminalHeight || 25);
@@ -309,8 +309,8 @@ export class Image {
         typeof passedWidth === "string" ? Number(passedWidth) : passedWidth;
     } else if (passedHeight) {
       tempWidth =
-        pxRatio *
-        (typeof passedHeight === "string"
+        pxRatio
+        * (typeof passedHeight === "string"
           ? Number(passedHeight)
           : passedHeight);
     } else if (makeOneRowHigh || imageSize.height <= rowHeight) {
@@ -399,9 +399,9 @@ async function image(token: Token, filePath: string) {
   if (typeof path !== "string")
     throw new Error("Something went wrong, this shouldn't happen!");
   const alt =
-    (token.attrGet("alt") as string) ||
-    token.children?.[0]?.content ||
-    "No alt text provided";
+    (token.attrGet("alt") as string)
+    || token.children?.[0]?.content
+    || "No alt text provided";
   return new Image(String(path), filePath, alt, token);
 }
 
@@ -585,8 +585,8 @@ export async function codeBlock(token: Token) {
   if (!token.type.match(/fence|code_block/))
     throw new Error("WRONG TOKEN HOW IS THIS DEV SO STUPID");
   if (
-    Object.keys(Shiki.bundledLanguages).includes(token.info) ||
-    Object.keys(Shiki.bundledLanguagesAlias).includes(token.info)
+    Object.keys(Shiki.bundledLanguages).includes(token.info)
+    || Object.keys(Shiki.bundledLanguagesAlias).includes(token.info)
   ) {
     const shikiTokens = await Shiki.codeToTokens(token.content, {
       lang: token.info as Shiki.BundledLanguage,
@@ -825,12 +825,18 @@ function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
           return {
             ...token,
             content: token.content.map((row) =>
-              row.map((cell) => {
-                return {
-                  ...cell,
-                  content: removeWhitespaceTokens(cell.content),
-                };
-              }),
+              row
+                .map((cell) => {
+                  const removedWhitespaceTokens = removeWhitespaceTokens(
+                    cell.content,
+                  );
+                  if (removedWhitespaceTokens.length === 0) return;
+                  return {
+                    ...cell,
+                    content: removedWhitespaceTokens,
+                  };
+                })
+                .filter((cell) => cell?.type === "table-cell"),
             ),
           };
         }
@@ -967,9 +973,9 @@ export default async function stylize(
       push.content = await renderInline(token);
     } else {
       throw new Error(
-        "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function" +
-        "\n" +
-        Chalk.dim(
+        "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function"
+        + "\n"
+        + Chalk.dim(
           `PS: the token type was ${token.type}. Its index is ${index} `,
         ),
       );

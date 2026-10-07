@@ -460,11 +460,14 @@ if (args.values.printToStdout) {
               indent + 2,
             );
             bulletListItems.push(
-              renderedListContent.split("\n").map((line, index) => {
-                return index === 0
-                  ? `${" ".repeat(indent)}${bp} ${line}`
-                  : `${" ".repeat(indent)}  ${line}`;
-              }),
+              renderedListContent
+                .split("\n")
+                .map((line, index) => {
+                  return index === 0
+                    ? `${" ".repeat(indent)}${bp} ${line}`
+                    : `${" ".repeat(indent)}  ${line}`;
+                })
+                .join("\n"),
             );
           }
           contentStrings.push(bulletListItems.join("\n"));
@@ -473,7 +476,9 @@ if (args.values.printToStdout) {
         //#region ordered list
         case "ordered_list":
           let number = parseInt(token.properties.start) || 1;
-          const orderdListMarkerWidth = String(token.content.length).length;
+          const orderedListMarkerWidth = String(
+            token.content.length - 1,
+          ).length;
           const orderedListItems = [];
           for (const listItem of token.content) {
             const transformedListItem = makeTaskList(listItem);
@@ -486,7 +491,7 @@ if (args.values.printToStdout) {
                 .split("\n")
                 .map((line, index) =>
                   index === 0
-                    ? `${indent}${String(number++).padStart(orderdListMarkerWidth, "0")}. ${line}`
+                    ? `${indent}${String(number++).padStart(orderedListMarkerWidth)}. ${line}`
                     : `${indent}  ${line}`,
                 ),
             );

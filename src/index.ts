@@ -1065,6 +1065,7 @@ export async function renderMarkdown(
       //#region ordered list
       case "ordered_list":
         let number = token.properties.start || 1;
+        const initialNumber = number;
         const orderedListBox = new BoxRenderable(ctx, {
           alignSelf: token.properties.align ?? "left",
           alignItems: token.properties.align ?? "left",
@@ -1076,10 +1077,8 @@ export async function renderMarkdown(
             );
           const transformedListItem = makeTaskList(listItem);
           const listContent = transformedListItem.content;
-          const listRenderables = await renderMarkdown(
-            listContent.flat() as ProcessedToken[],
-            ctx,
-          );
+          const listRenderables = await renderMarkdown(listContent, ctx);
+          const markerWidth = listRenderables.length + initialNumber - 1;
           listRenderables.forEach((listRenderable, index) => {
             orderedListBox.add(
               Box(
@@ -1090,7 +1089,7 @@ export async function renderMarkdown(
                 Text({
                   content:
                     index === 0
-                      ? `${String(number).padStart(listRenderables.length + number - 1)}.`
+                      ? `${String(number).padStart(markerWidth)}.`
                       : " ",
                 }),
                 Box({}, listRenderable),

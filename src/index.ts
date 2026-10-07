@@ -1529,8 +1529,9 @@ keymap.registerLayer({
     {
       name: "content.prevDetails",
       run() {
-        if (focusedElement !== "content") return;
-        if (!detailsElementsIndex) detailsElementsIndex = 0;
+        if (focusedElement !== "content" || detailsElementsArray.length < 1)
+          return;
+        if (detailsElementsIndex === null) detailsElementsIndex = 0;
         detailsElementsIndex =
           (detailsElementsIndex - 1 + detailsElementsArray.length)
           % detailsElementsArray.length;
@@ -1538,15 +1539,8 @@ keymap.registerLayer({
         console.log(
           `pressed previous details. current index is ${detailsElementsIndex}`,
         );
-        detailsElementsIndex =
-          detailsElementsIndex % detailsElementsArray.length;
-        if (detailsElement) {
-          detailsElement?.focus();
-          (
-            root.findDescendantById(`root-scrollbox`) as
-            ScrollBoxRenderable | undefined
-          )?.scrollBy(detailsElement.y);
-        }
+        detailsElement?.focus();
+        contentScrollBox.scrollBy(detailsElement?.y ?? 0);
       },
     },
     //#endregion
@@ -1555,20 +1549,17 @@ keymap.registerLayer({
       name: "content.nextDetails",
       run() {
         if (focusedElement !== "content") return;
-        if (!detailsElementsIndex) detailsElementsIndex = -1;
+        if (focusedElement !== "content" || detailsElementsArray.length < 1)
+          return;
+        if (detailsElementsIndex === null) detailsElementsIndex = -1;
         detailsElementsIndex =
           (detailsElementsIndex + 1) % detailsElementsArray.length;
         const detailsElement = detailsElementsArray.at(detailsElementsIndex);
         console.log(
-          `pressed previous details. current index is ${detailsElementsIndex}`,
+          `pressed next details. current index is ${detailsElementsIndex}`,
         );
-        if (detailsElement) {
-          detailsElement?.focus();
-          (
-            root.findDescendantById(`root-scrollbox`) as
-            ScrollBoxRenderable | undefined
-          )?.scrollBy(detailsElement.y);
-        }
+        detailsElement?.focus();
+        contentScrollBox.scrollBy(detailsElement?.y ?? 0);
       },
     },
     //#endregion

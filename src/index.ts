@@ -1046,6 +1046,7 @@ export async function renderMarkdown(
           const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(listContent, ctx);
           listRenderables.forEach((listRenderable, index) => {
+            if (index > 0) listRenderable.marginTop = 1;
             bulletListbox.add(
               Box(
                 {
@@ -1079,19 +1080,24 @@ export async function renderMarkdown(
             listContent.flat() as ProcessedToken[],
             ctx,
           );
-          for (const listRenderable of listRenderables) {
+          listRenderables.forEach((listRenderable, index) => {
             orderedListBox.add(
               Box(
                 {
                   flexDirection: "row",
                   gap: 1,
                 },
-                Text({ content: `${number}.` }),
+                Text({
+                  content:
+                    index === 0
+                      ? `${String(number).padStart(listRenderables.length + number - 1)}.`
+                      : " ",
+                }),
                 Box({}, listRenderable),
               ),
             );
             number++;
-          }
+          });
         }
         componentArray.push(orderedListBox);
         break;
@@ -1425,6 +1431,7 @@ const contentScrollBoxOpts = {
   id: "root-scrollbox",
   flexShrink: 1,
   flexGrow: 1,
+  padding: 1,
   paddingRight: 3,
   contentOptions: {
     rowGap: 1,

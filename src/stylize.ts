@@ -260,15 +260,36 @@ export class Image {
   static async #getBuffer(filePath: string, path: string) {
     logger.info("path: " + path + " | " + "absolute?: " + isAbsolute(path));
     logger.info(
-      "tried to access",
-      isAbsolute(path) ? path : join(dirname(filePath), path),
+      "tried to access" + isAbsolute(path)
+        ? path
+        : join(dirname(filePath), path),
     );
     try {
-      return URL.canParse(path)
-        ? (await got(path, { retry: { limit: 2 } })).rawBody
-        : await Bun.file(
-          isAbsolute(path) ? path : join(dirname(filePath), path),
-        ).bytes();
+      let properPath;
+      const pathSeparator = /(?<!(:\/|:|\\))\//;
+      // this regex matches a `/` if it is not preceded by `:/`, `:`, or `\`
+      const filePathArray = filePath.split(pathSeparator).slice(0, -1);
+      const pathArray = path.split(pathSeparator);
+      if (URL.canParse(path)) {
+        properPath = path;
+      } else if (isAbsolute(path)) {
+        properPath = filePathArray[0] + path;
+      } else {
+        for (const dir of pathArray) {
+          if (dir === ".") {
+            continue;
+          } else if (dir === "..") {
+            filePathArray.pop();
+          } else {
+            filePathArray.push(dir);
+          }
+        }
+        properPath = filePathArray.join("/");
+      }
+      logger.info(`path is ${properPath}`);
+      return URL.canParse(properPath)
+        ? (await got(properPath, { retry: { limit: 2 } })).rawBody
+        : await Bun.file(properPath).bytes();
     } catch (err) {
       logger.error(`${err}`);
       return undefined;
@@ -290,29 +311,53 @@ export class Image {
     }
     const getImageSize = (await import("image-size")).imageSize;
     const imageSize = getImageSize(tempBuf!);
+    const res = ctx.resolution;
+    const terminalWidth = ctx.terminalWidth;
+    const terminalHeight = ctx.terminalHeight;
     const cellAspectRatio =
-      (ctx.resolution?.height || 1920)
-      / (ctx.terminalHeight || 25)
-      / ((ctx.resolution?.width || 1080) / (ctx.terminalWidth || 80));
+      (res?.height || 1920)
+      / (terminalHeight || 25)
+      / ((res?.width || 1080) / (terminalWidth || 80));
     logger.info(`image type: ${imageSize.type}`);
-    const rowHeight =
-      (ctx.resolution?.height || 1080) / (ctx.terminalHeight || 25);
-    const cellWidth =
-      (ctx.resolution?.width || 1920) / (ctx.terminalWidth || 80);
+    const rowHeight = (res?.height || 1080) / (terminalHeight || 25);
+    const cellWidth = (res?.width || 1920) / (terminalWidth || 80);
     const pxRatio = imageSize.width / imageSize.height;
     const ratio = pxRatio * cellAspectRatio; // cellAspectRatio is around 2 usually
     let tempWidth = imageSize.width;
     const passedWidth = this.token.attrGet("width");
     const passedHeight = this.token.attrGet("height");
+    const parseAttrs = /(?<num>\d+)(?<unit>\D+)?/;
     if (passedWidth) {
-      tempWidth =
-        typeof passedWidth === "string" ? Number(passedWidth) : passedWidth;
+      const parsedWidth = String(passedWidth).match(parseAttrs);
+      const integerWidth = parseInt(parsedWidth?.groups?.num || "1");
+      const unit = parsedWidth?.groups?.unit;
+      if (unit === "px") {
+        tempWidth = integerWidth;
+      } else if (unit === "pt") {
+        tempWidth = (integerWidth * 4) / 3;
+      } else if (unit === "%") {
+        tempWidth = (integerWidth / 100) * (terminalWidth || 1920);
+      } else if (unit === "pc") {
+        tempWidth = integerWidth * 16;
+      } else {
+        tempWidth = integerWidth;
+      }
     } else if (passedHeight) {
-      tempWidth =
-        pxRatio
-        * (typeof passedHeight === "string"
-          ? Number(passedHeight)
-          : passedHeight);
+      const parsedHeight = String(passedHeight).match(parseAttrs);
+      const integerHeight = parseInt(parsedHeight?.groups?.num || "1");
+      const unit = parsedHeight?.groups?.unit;
+      let tempHeight;
+      if (unit === "px") {
+        tempHeight = integerHeight;
+      } else if (unit === "pt") {
+        tempHeight = (integerHeight * 4) / 3;
+      } else if (unit === "%") {
+        tempHeight = (integerHeight / 100) * (terminalHeight || 1920);
+      } else if (unit === "pc") {
+        tempHeight = integerHeight * 16;
+      } else {
+        tempHeight = integerHeight;
+      }
     } else if (makeOneRowHigh || imageSize.height <= rowHeight) {
       tempWidth = ratio * cellWidth;
     }

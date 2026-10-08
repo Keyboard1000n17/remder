@@ -367,11 +367,25 @@ if (args.values.printToStdout) {
             if (element.type === "image") {
               const image = element.content;
               if (terminalImage) {
-                const buf = await image.imageBuffer;
+                const initBuf = await image.imageBuffer;
+                let buf;
+                if (!initBuf) {
+                  paragraphItems.push(chalk.gray(image.imageAlt));
+                  continue;
+                }
+                if (image.path.endsWith(".svg")) {
+                  const Resvg = (await import("@resvg/resvg-js")).Resvg;
+                  buf = new Resvg(Buffer.from(initBuf)).render().asPng();
+                } else if (image.path.endsWith(".webp")) {
+                  buf = await new Bun.Image(initBuf).png().bytes();
+                }
+                if (!buf) continue;
                 paragraphItems.push(
-                  buf
-                    ? await terminalImage.buffer(buf)
-                    : chalk.gray(image.imageAlt),
+                  await terminalImage.buffer(buf, {
+                    preferNativeRender: !/^xterm$|^tmux|^screen/.test(
+                      process.env.TERM || "",
+                    ),
+                  }),
                 );
               }
             } else if (element.type === "text") {
@@ -479,7 +493,7 @@ if (args.values.printToStdout) {
           const orderedListMarkerWidth = String(
             token.content.length - 1,
           ).length;
-          const orderedListItems = [];
+          const orderedListItems: string[] = [];
           for (const listItem of token.content) {
             const transformedListItem = makeTaskList(listItem);
             const renderedListContent = await tokensToString(
@@ -491,9 +505,10 @@ if (args.values.printToStdout) {
                 .split("\n")
                 .map((line, index) =>
                   index === 0
-                    ? `${indent}${String(number++).padStart(orderedListMarkerWidth)}. ${line}`
-                    : `${indent}  ${line}`,
-                ),
+                    ? `${" ".repeat(indent)}${String(number++).padStart(orderedListMarkerWidth)}. ${line}`
+                    : `${" ".repeat(indent)}${line}`,
+                )
+                .join("\n"),
             );
           }
           contentStrings.push(orderedListItems.join("\n"));
@@ -529,10 +544,7 @@ if (args.values.printToStdout) {
           };
           const alertType = token.properties.alertType;
           const alertIconAndColor = alertIcons[alertType];
-          const renderedAlertChildren = await tokensToString(
-            token.content,
-            indent + 2,
-          );
+          const renderedAlertChildren = await tokensToString(token.content);
           const uhb = chalk.hex(alertIconAndColor!.color)("\u258c"); // unicode left half block
           contentStrings.push(
             uhb

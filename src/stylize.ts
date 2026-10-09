@@ -295,20 +295,12 @@ export class Image {
       return undefined;
     }
   }
-  async #finishLoad(
+  async getImageSize(
     ctx: RenderContext,
-    wrapper: BoxRenderable,
-    spinner: TextRenderable,
-    spinnerLoop: ReturnType<typeof setInterval>,
+    tempBuf: Uint8Array<ArrayBuffer> | Buffer<ArrayBufferLike>,
+    parentWidth: number,
     makeOneRowHigh: boolean,
   ) {
-    const tempBuf = await this.imageBuffer!;
-    if (tempBuf === undefined) {
-      this.loadState = "loaded";
-      spinner.visible = false;
-      wrapper.remove(spinner);
-      return;
-    }
     const getImageSize = (await import("image-size")).imageSize;
     const imageSize = getImageSize(tempBuf!);
     const res = ctx.resolution;
@@ -324,6 +316,8 @@ export class Image {
     const pxRatio = imageSize.width / imageSize.height;
     const ratio = pxRatio * cellAspectRatio; // cellAspectRatio is around 2 usually
     let tempWidth = imageSize.width;
+    let tempHeight;
+    let shouldUseWidth = true;
     const passedWidth = this.token.attrGet("width");
     const passedHeight = this.token.attrGet("height");
     const parseAttrs = /(?<num>\d+)(?<unit>\D+)?/;
@@ -336,43 +330,74 @@ export class Image {
       } else if (unit === "pt") {
         tempWidth = (integerWidth * 4) / 3;
       } else if (unit === "%") {
-        tempWidth = (integerWidth / 100) * (terminalWidth || 1920);
+        tempWidth =
+          (integerWidth / 100)
+          * (parentWidth ?? (terminalWidth || 1920))
+          * cellWidth;
       } else if (unit === "pc") {
         tempWidth = integerWidth * 16;
       } else {
         tempWidth = integerWidth;
       }
-    } else if (passedHeight) {
+    }
+    if (passedHeight) {
       const parsedHeight = String(passedHeight).match(parseAttrs);
+      shouldUseWidth = false;
       const integerHeight = parseInt(parsedHeight?.groups?.num || "1");
       const unit = parsedHeight?.groups?.unit;
-      let tempHeight;
       if (unit === "px") {
         tempHeight = integerHeight;
       } else if (unit === "pt") {
         tempHeight = (integerHeight * 4) / 3;
-      } else if (unit === "%") {
-        tempHeight = (integerHeight / 100) * (terminalHeight || 1920);
       } else if (unit === "pc") {
         tempHeight = integerHeight * 16;
       } else {
         tempHeight = integerHeight;
       }
-    } else if (makeOneRowHigh || imageSize.height <= rowHeight) {
-      tempWidth = ratio * cellWidth;
     }
-    if (tempWidth > (ctx.resolution?.width ?? 1920) - 3 * cellWidth)
-      tempWidth = (ctx.resolution?.width ?? 1920) - 3 * cellWidth;
+    if (!(passedWidth && passedHeight) && makeOneRowHigh) {
+      tempWidth = ratio * cellWidth;
+      shouldUseWidth = true;
+    }
+    if (tempWidth > (parentWidth - 2) * cellWidth)
+      tempWidth = (parentWidth - 2) * cellWidth;
     const width = tempWidth;
+    const height = tempHeight ?? width / pxRatio;
     logger.info(
-      `width for ${this.imageAlt || "unknown"}: ${width}, ${width / cellWidth}`,
+      `width for ${this.imageAlt || "unknown"}: pixels - ${width}, cells - ${width / cellWidth}`,
     );
+    return {
+      cellWidth,
+      rowHeight,
+      shouldUseWidth,
+      width,
+      height,
+      imageType: imageSize.type,
+    };
+  }
+  async #finishLoad(
+    ctx: RenderContext,
+    wrapper: BoxRenderable,
+    spinner: TextRenderable,
+    spinnerLoop: ReturnType<typeof setInterval>,
+    parentWidth: number,
+    makeOneRowHigh: boolean,
+  ) {
+    const tempBuf = await this.imageBuffer!;
+    if (tempBuf === undefined) {
+      this.loadState = "loaded";
+      spinner.visible = false;
+      wrapper.remove(spinner);
+      return;
+    }
+    const { cellWidth, rowHeight, shouldUseWidth, width, height, imageType } =
+      await this.getImageSize(ctx, tempBuf, parentWidth, makeOneRowHigh);
     const buf =
-      imageSize.type === "svg"
+      imageType === "svg"
         ? new Resvg(Buffer.from(tempBuf!), {
           fitTo: {
-            mode: "width",
-            value: width,
+            mode: shouldUseWidth ? "width" : "height",
+            value: shouldUseWidth ? width : height,
           },
           shapeRendering: 2,
         })
@@ -386,8 +411,10 @@ export class Image {
       margin: 0,
       onLoad: async () => {
         imageRenderable.width = width / cellWidth;
-        imageRenderable.height = width / cellWidth / ratio;
-        logger.info(`image height: ${width / ratio}`);
+        imageRenderable.height = height / rowHeight;
+        logger.info(
+          `image height: px - ${height} colums - ${height / rowHeight}`,
+        );
         clearInterval(spinnerLoop);
         spinner.visible = false;
         wrapper.remove(spinner);
@@ -422,7 +449,7 @@ export class Image {
     const frames = Image.frames;
     const spinner = new TextRenderable(ctx, {
       content: `${frames[0]} Loading`,
-      id: `${this.id} __spinner`,
+      id: `${this.id}__spinner`,
     });
     const spinnerLoop = setInterval(() => {
       Image.frame = (Image.frame + 1) % frames.length;
@@ -431,7 +458,9 @@ export class Image {
       ]);
     }, 80);
     wrapper.add(spinner);
-    this.#finishLoad(...[ctx, wrapper, spinner, spinnerLoop, makeOneRowHigh]);
+    this.#finishLoad(
+      ...[ctx, wrapper, spinner, spinnerLoop, parentWidth, makeOneRowHigh],
+    );
     return wrapper;
   }
 }

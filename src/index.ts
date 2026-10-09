@@ -771,6 +771,13 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
     throw new Error(
       `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
     );
+  console.log({
+    ctxWidth: ctx.width,
+    ctxHeight: ctx.height,
+    terminalWidth: ctx.terminalWidth,
+    terminalHeight: ctx.terminalHeight,
+    resolution: ctx.resolution,
+  });
   const table = new BoxRenderable(ctx, {
     width: "100%",
     maxWidth: ctx.width - 3,
@@ -780,20 +787,45 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
     ((ctx.terminalWidth ?? 80) - 2)
     / Math.max(...tableToken.content.map((arr) => arr.length)),
   );
-  const maxCellContentWidth =
-    Math.max(
-      ...tableToken.content.flatMap((row) =>
-        row.flatMap((cell) =>
-          cell.content
-            .filter((token) => token.type === "text")
-            .flatMap((token) =>
-              token.content.chunks.map((chunk) => Bun.stringWidth(chunk.text)),
-            ),
-        ),
-      ),
-    ) + 3;
+  const minWidth = 4;
+  const cellContentWidths: number[] = await Promise.all(
+    tableToken.content.flatMap((row) =>
+      row.map(async (cell) => {
+        const widths = await Promise.all(
+          cell.content.map(async (token) => {
+            if (token.type === "text") {
+              return Math.max(
+                ...token.content.chunks.map((chunk) =>
+                  Bun.stringWidth(chunk.text),
+                ),
+              );
+            }
+            if (token.type === "image") {
+              const buf = await token.content.imageBuffer;
+              if (!buf) return minWidth;
+              const { width } = await token.content.getImageSize(
+                ctx,
+                buf,
+                (ctx.width - 40)
+                / Math.max(...tableToken.content.map((row) => row.length)),
+                cell.content.length > 1,
+              );
+              return width + 2;
+            }
+            return minWidth;
+          }),
+        );
+        return Math.max(...widths);
+      }),
+    ),
+  );
+  const maxCellContentWidth = Math.max(4, Math.max(...cellContentWidths) + 3);
   let cellWidth = Math.min(maxCellWidth, maxCellContentWidth);
-  console.log(cellWidth);
+  console.log({
+    maxCellWidth,
+    maxCellContentWidth,
+    cellWidth,
+  });
   for (let rowIndex = 0; rowIndex < tableToken.content.length; rowIndex++) {
     const row = tableToken.content[rowIndex]!;
     const isFirstRow = rowIndex === 0;
@@ -856,14 +888,18 @@ async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
         } else if (item.type === "image") {
           if (args.values.noRenderImages) {
             cellRenderable.add(
-              item.content.load(ctx, table.width, cell.content.length > 0),
+              new TextRenderable(ctx, {
+                content: item.content.imageAlt,
+                fg: "gray",
+              }),
             );
             continue;
           }
           cellRenderable.add(
             item.content.load(
               ctx,
-              root.findDescendantById("root-scrollbox")?.width || 80,
+              (ctx.width - 40)
+              / Math.max(...tableToken.content.map((row) => row.length)),
               cell.content.length > 1,
             ),
           );

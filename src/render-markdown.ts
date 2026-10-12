@@ -684,6 +684,17 @@ export async function renderMarkdown(
         detailsElements.push(summaryTextRenderable);
         break;
       //#endregion
+      //#region horizontal rule
+      case "thematic-break":
+        componentArray.push(
+          new BoxRenderable(ctx, {
+            width: "100%",
+            height: 1,
+            border: ["bottom"],
+          }),
+        );
+        break;
+      //#endregion
       //#region default
       default:
         console.warn("DEFAULT CASE:", token);

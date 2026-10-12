@@ -337,6 +337,10 @@ export default async function tokensToString(
         );
         break;
       //#endregion
+      //#region horizontal rule
+      case "thematic-break":
+        contentStrings.push("─".repeat(Number(termWidth) - 2));
+        break;
       //#region default
       default:
         console.warn("DEFAULT CASE:", token);

@@ -69,146 +69,9 @@ if (args.values.help) {
 }
 //#endregion
 
-import parseInput from "./parse-input.js";
-import stylize, { type HeadingObject, type ProcessedToken } from "./stylize.js";
-import got from "got";
-// these three are imported beforehand because they are required in the tokensToString function which is defined towards the start
-
-// defined before tokensToString function because they're required there
-const alignText = (
-  text: string,
-  align: "left" | "center" | "right",
-): string => {
-  const width = parseInt(args.values.width);
-  if (align === "left") {
-    return text;
-  } else if (align === "right") {
-    return text
-      .split("\n")
-      .map((line) =>
-        line.padStart(Math.max(0, Bun.stringWidth(line) - width), " "),
-      )
-      .join("\n");
-  } else if (align === "center") {
-    return text
-      .split("\n")
-      .map((line) =>
-        line.padStart(Math.max(0, (width - Bun.stringWidth(line)) / 2)),
-      )
-      .join("");
-  }
-  throw new Error(`Got align string "${align}"`);
-};
-
-const chunksToAnsi = (chunks: TextChunk[]) => {
-  return chunks
-    .map((chunk) => {
-      let text = chunk.text;
-      const attrs = chunk.attributes;
-      if (chunk.fg) {
-        const fg = chunk.fg.toInts().slice(0, 3) as [number, number, number];
-        text = chalk.rgb(...fg)(text);
-      }
-      if (chunk.bg) {
-        const bg = chunk.bg.toInts().slice(0, 3) as [number, number, number];
-        text = chalk.bgRgb(...bg)(text);
-      }
-      if (chunk.link) {
-        import("terminal-link")
-          .then((r) => r.default)
-          .then((terminalLink) => (text = terminalLink(text, chunk.link!.url)));
-      }
-      if (attrs && attrs & TextAttributes.BOLD) text = chalk.bold(text);
-      if (attrs && attrs & TextAttributes.ITALIC) text = chalk.italic(text);
-      if (attrs && attrs & TextAttributes.STRIKETHROUGH)
-        text = chalk.strikethrough(text);
-      if (attrs && attrs & TextAttributes.UNDERLINE)
-        text = chalk.underline(text);
-      return text;
-    })
-    .join("");
-};
-
-async function makeFigletFont(
-  text: string,
-  level: number,
-  align: "left" | "center" | "right",
-) {
-  const figlet = (await import("figlet")).default;
-  figlet.defaults({
-    fontPath: `${import.meta.dir}/fonts`,
-  });
-  figlet.parseFont(
-    "Calvin S Modified",
-    await Bun.file(`${import.meta.dir}/fonts/calvin-s.flf`).text(),
-  );
-  const fontsList: Record<number, FontName> = {
-    1: "ANSI Regular",
-    2: "Coder Mini",
-    3: "ANSI Compact",
-    4: "Small",
-    5: "miniwi",
-    6: "Calvin S Modified",
-  };
-  return figlet
-    .textSync(text.trim(), {
-      font: fontsList[level],
-      width: parseInt(args.values.width),
-      whitespaceBreak: true,
-    })
-    .split(/\n\s+\n/)
-    .map((line) => alignText(line, align))
-    .join("\n\n");
-}
-
-function makeTaskList(item: ProcessedToken) {
-  if (item.type !== "list_item") throw new Error("");
-  const content: ProcessedToken[] = [];
-  for (const child of item.content as ProcessedToken[]) {
-    switch (child.type) {
-      case "paragraph":
-        child.content.forEach((text) => {
-          if (text.type === "text") {
-            const startsWith =
-              text.content.chunks[0]?.text.match(/^\[[ xX]\]\s*/);
-            if (startsWith?.[0]) {
-              text.content.chunks[0]!.text =
-                text.content.chunks[0]!.text.replace(startsWith[0], " ");
-              text.content.chunks.unshift({
-                __isChunk: true,
-                text:
-                  startsWith?.[0].trim().toLowerCase() === "[x]"
-                    ? " \uf00c "
-                    : "   ",
-                bg: RGBA.fromHex("#808080"),
-              });
-            }
-            content.push({
-              ...text,
-              content: text.content,
-            });
-          } else {
-            content.push(text);
-          }
-        });
-        break;
-      case "bullet_list":
-        content.push({
-          ...child,
-          content: Array.isArray(child.content)
-            ? child.content.map((t) => makeTaskList(t))
-            : child.content,
-        });
-        break;
-      default:
-        content.push(child);
-    }
-  }
-  return { ...item, content };
-}
-
 //#region icon map
-const languageToNerdFontIconMap: Record<string, string> = {
+const languageToNerdFontIconMap: { [value: string]: string; default: string } =
+{
   "angular-html": "\ued4b",
   "angular-ts": "\ued4b",
   apache: "\ue72b",
@@ -337,303 +200,16 @@ const languageToNerdFontIconMap: Record<string, string> = {
 //#region --print-to-stdout option
 // NOTE: chatgpt made a prototype of this
 if (args.values.printToStdout) {
-  async function tokensToString(
-    tokens: ProcessedToken[],
-    indent = 0,
-  ): Promise<string> {
-    const contentStrings: string[] = [];
-    const chalk = (await import("chalk")).default;
-    const terminalImage =
-      tokens.some(
-        (t) =>
-          t.type === "paragraph" && t.content.some((u) => u.type === "image"),
-      ) && (await import("terminal-image")).default;
-    const table =
-      tokens.some((t) => t.type === "table") && (await import("table")).table;
-    for (const token of tokens) {
-      //#region switch token type
-      switch (token.type) {
-        //#region text
-        case "text":
-          const content = token.content;
-          contentStrings.push(chunksToAnsi(content.chunks));
-          break;
-        //#endregion
-        //#region paragraph
-        case "paragraph": {
-          const content = token.content;
-          const paragraphItems: string[] = [];
-          for (const element of content) {
-            if (element.type === "image") {
-              const image = element.content;
-              if (terminalImage) {
-                const initBuf = await image.imageBuffer;
-                let buf;
-                if (!initBuf) {
-                  paragraphItems.push(chalk.gray(image.imageAlt));
-                  continue;
-                }
-                if (image.path.endsWith(".svg")) {
-                  const Resvg = (await import("@resvg/resvg-js")).Resvg;
-                  buf = new Resvg(Buffer.from(initBuf)).render().asPng();
-                } else if (image.path.endsWith(".webp")) {
-                  buf = await new Bun.Image(initBuf).png().bytes();
-                }
-                if (!buf) continue;
-                paragraphItems.push(
-                  await terminalImage.buffer(buf, {
-                    preferNativeRender: !/^xterm$|^tmux|^screen/.test(
-                      process.env.TERM || "",
-                    ),
-                  }),
-                );
-              }
-            } else if (element.type === "text") {
-              const text = chunksToAnsi(element.content.chunks);
-              paragraphItems.push(text);
-            }
-          }
-          contentStrings.push(...paragraphItems);
-          break;
-        }
-        //#endregion
-        //#region headings
-        case "heading":
-          const tokenContent: HeadingObject = token.content as HeadingObject;
-          if (args.values.noRenderHeadings) {
-            const colorMap: Record<number, (str: string) => string> = {
-              1: (str: string) => chalk.hex("#ffa50a")(str),
-              2: (str: string) => chalk.hex("#eeee00")(str),
-              3: (str: string) => chalk.hex("#0acadd")(str),
-              4: (str: string) => chalk.hex("#ffa5a5")(str),
-              5: (str: string) => chalk.hex("#22ff22")(str),
-              6: (str: string) => chalk.hex("#aaaaaa")(str),
-            };
-            const str = colorMap[tokenContent.level]!(
-              "#".repeat(tokenContent.level) + " " + tokenContent.text,
-            );
-            const heading = alignText(str, token.properties.align ?? "left");
-            contentStrings.push(heading);
-            if (tokenContent.links.chunks.length > 0) {
-              contentStrings.push(chunksToAnsi(tokenContent.links.chunks));
-            }
-            break;
-          }
-          const figletChars = await makeFigletFont(
-            tokenContent.text,
-            tokenContent.level,
-            token.properties.align ?? "left",
-          );
-          contentStrings.push(figletChars);
-          if (tokenContent.links.chunks.length > 0) {
-            contentStrings.push(chunksToAnsi(tokenContent.links.chunks));
-          }
-          break;
-        //#endregion
-        //#region table
-        case "table":
-          if (!table) break;
-          const cells = await Promise.all(
-            token.content.map(
-              async (row) =>
-                await Promise.all(
-                  row.map(async (cell) => await tokensToString(cell.content)),
-                ),
-            ),
-          );
-          const renderedTable = table(cells, {
-            border: {
-              topLeft: "╭",
-              topRight: "╮",
-              bottomRight: "╯",
-              bottomLeft: "╰",
-              topBody: `─`,
-              topJoin: `┬`,
-              bottomBody: `─`,
-              bottomJoin: `┴`,
-              bodyLeft: `│`,
-              bodyRight: `│`,
-              bodyJoin: `│`,
-              joinBody: `─`,
-              joinLeft: `├`,
-              joinRight: `┤`,
-              joinJoin: `┼`,
-            },
-          });
-          contentStrings.push(renderedTable);
-          break;
-        //#endregion
-        //#region bullet list
-        case "bullet_list":
-          const bp = "\u2022";
-          const bulletListItems = [];
-          for (const listItem of token.content) {
-            const transformedListItem = makeTaskList(listItem);
-            const renderedListContent = await tokensToString(
-              transformedListItem.content,
-              indent + 2,
-            );
-            bulletListItems.push(
-              renderedListContent
-                .split("\n")
-                .map((line, index) => {
-                  return index === 0
-                    ? `${" ".repeat(indent)}${bp} ${line}`
-                    : `${" ".repeat(indent)}  ${line}`;
-                })
-                .join("\n"),
-            );
-          }
-          contentStrings.push(bulletListItems.join("\n"));
-          break;
-        //#endregion
-        //#region ordered list
-        case "ordered_list":
-          let number = parseInt(token.properties.start) || 1;
-          const orderedListMarkerWidth = String(
-            token.content.length - 1,
-          ).length;
-          const orderedListItems: string[] = [];
-          for (const listItem of token.content) {
-            const transformedListItem = makeTaskList(listItem);
-            const renderedListContent = await tokensToString(
-              transformedListItem.content,
-              indent + 2,
-            );
-            orderedListItems.push(
-              renderedListContent
-                .split("\n")
-                .map((line, index) =>
-                  index === 0
-                    ? `${" ".repeat(indent)}${String(number++).padStart(orderedListMarkerWidth)}. ${line}`
-                    : `${" ".repeat(indent)}${line}`,
-                )
-                .join("\n"),
-            );
-          }
-          contentStrings.push(orderedListItems.join("\n"));
-          break;
-        //#endregion
-        //#region blockquote
-        case "blockquote":
-          const uhb = "\u258c"; // unicode left half block
-          const blockquoteItems = [];
-          const renderedBlockquoteChildren = await tokensToString(
-            token.content,
-            indent + 2,
-          );
-          blockquoteItems.push(
-            renderedBlockquoteChildren
-              .split("\n")
-              .map((line) => `${uhb} ${line}`)
-              .join("\n"),
-          );
-          break;
-        //#endregion
-        //#region alerts
-        case "alert": {
-          const alertIcons: Record<
-            string,
-            { icon: string; color: string; name: string }
-          > = {
-            note: { icon: "\uf129", color: "#6af", name: "Note" },
-            tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
-            important: { icon: "\uf12a", color: "#96f", name: "Important" },
-            warning: { icon: "\uea6c", color: "#dd4", name: "Warning" },
-            caution: { icon: "\u{f0ce6}", color: "#f44", name: "Caution" },
-          };
-          const alertType = token.properties.alertType;
-          const alertIconAndColor = alertIcons[alertType];
-          const renderedAlertChildren = await tokensToString(token.content);
-          const uhb = chalk.hex(alertIconAndColor!.color)("\u258c"); // unicode left half block
-          contentStrings.push(
-            uhb
-            + chalk.hex(alertIconAndColor!.color)(
-              ` ${alertIconAndColor!.icon} ${alertIconAndColor!.name}`,
-            )
-            + "\n"
-            + renderedAlertChildren
-              .split("\n")
-              .map((line) => `${uhb} ${line}`)
-              .join("\n"),
-          );
-          break;
-        }
-        //#endregion
-        //#region code block
-        case "codeBlock":
-          const codeTokenContent = token.content as {
-            code: string;
-            language: string;
-          };
-          const language = codeTokenContent.language;
-          const icon =
-            languageToNerdFontIconMap[language]
-            ?? languageToNerdFontIconMap.default;
-          const languageLine = ` ${icon} ${language} `;
-          const boxWidth = Math.min(
-            Math.max(
-              ...codeTokenContent.code
-                .split("\n")
-                .map((line) => Bun.stringWidth(line)),
-              Bun.stringWidth(languageLine),
-            ) + 2,
-            parseInt(args.values.width) - 2,
-          );
-          const emptyLine = " ".repeat(boxWidth);
-          const code = codeTokenContent.code
-            .trim()
-            .split("\n")
-            .map(
-              (line) =>
-                " "
-                + line
-                + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 1),
-            )
-            .join("\n");
-          contentStrings.push(
-            chalk.bgHex("#181225")(
-              [
-                emptyLine,
-                `${languageLine}${" ".repeat(boxWidth - Bun.stringWidth(languageLine))}`,
-                emptyLine,
-                code,
-                emptyLine,
-              ].join("\n"),
-            ),
-          );
-          break;
-        //#endregion
-        //#region div
-        case "div":
-          contentStrings.push(await tokensToString(token.content));
-          break;
-        //#endregion
-        //#region details
-        case "details":
-          const detailsContent = token.content;
-          const summaryToken = detailsContent.find((t) => t.type === "summary");
-          const detailsToken = detailsContent.find((t) => t.type === "content");
-          contentStrings.push(
-            "\u25bc " + (await tokensToString(summaryToken!.content)),
-          );
-          contentStrings.push(await tokensToString(detailsToken!.content));
-          break;
-        //#endregion
-        //#region default
-        default:
-          console.warn("DEFAULT CASE:", token);
-          console.warn("args in current renderMarkdown() call:", tokens.length);
-        //#endregion
-      }
-      //#endregion
-    }
-    return contentStrings.join("\n\n");
-  }
+  const tokensToString = (await import("./tokens-to-string")).default;
   if (!process.stdin.isTTY) {
     const md = await Bun.stdin.text();
     const tokens = await stylize(parseInput(md), "");
-    const content = await tokensToString(tokens);
+    const content = await tokensToString(
+      tokens,
+      args.values.width,
+      args.values.noRenderHeadings,
+      languageToNerdFontIconMap,
+    );
     process.stdout.write(
       Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
     );
@@ -649,6 +225,9 @@ if (args.values.printToStdout) {
       : await Bun.file(path).text();
     const processedContent = await tokensToString(
       await stylize(parseInput(content), path),
+      args.values.width,
+      args.values.noRenderHeadings,
+      languageToNerdFontIconMap,
     );
     process.stdout.write(
       Bun.wrapAnsi(processedContent, parseInt(args.values.width), {
@@ -666,22 +245,15 @@ import {
   createCliRenderer,
   Box,
   Text,
-  type TextChunk,
   RGBA,
   createTextAttributes,
   StyledText,
-  KeyEvent,
   type BoxOptions,
   BoxRenderable,
   type TextOptions,
   ScrollBoxRenderable,
   SelectRenderable,
-  Renderable,
   TextRenderable,
-  type RenderContext,
-  type BorderSides,
-  RenderableEvents,
-  TextAttributes,
   SelectRenderableEvents,
   type SelectOption,
   InputRenderable,
@@ -689,700 +261,22 @@ import {
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import fuzzysort from "fuzzysort";
-import chalk from "chalk";
 import { stat, glob } from "node:fs/promises";
-import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 import { openSync } from "node:fs";
-import type { FontName } from "figlet";
+import { makeFigletFont } from "./utility-functions";
+import {
+  renderMarkdown,
+  headingsArrayForToc,
+  detailsElementsArray,
+} from "./render-markdown";
+import parseInput from "./parse-input.js";
+import stylize from "./stylize.js";
+import got from "got";
+
 //#endregion
 
-const colorPalette = createColorPalette();
-
-const headingsArrayForToc: {
-  text: string;
-  level: number;
-  id: string;
-  renderable: Renderable;
-}[] = []; // holds an array of all the headings in the document
 let headingIndexForToc = 0;
-const headingIndexes = [0, 0, 0, 0, 0, 0];
-
-const detailsElementsArray: Renderable[] = [];
 let detailsElementsIndex: number | null = null;
-
-//#region utility functions: `rgbToRGBA`, `randomIdGenerator` `ansiToTextChunks`, `ansiToTextToken`
-const rgbToRGBA = ([r, g, b]: [number, number, number]): [
-  number,
-  number,
-  number,
-] => [r / 255, g / 255, b / 255];
-
-const ansiToTextChunks = (text: string) => {
-  const ansiTokens = parseAnsiSequences(text);
-  const textChunks = ansiTokens.map((ansiToken): TextChunk => {
-    return {
-      __isChunk: true,
-      text: ansiToken.value,
-      fg: ansiToken.foreground
-        ? "name" in ansiToken.foreground
-          ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
-          : "rgb" in ansiToken.foreground
-            ? RGBA.fromValues(...rgbToRGBA(ansiToken.foreground.rgb))
-            : undefined
-        : undefined,
-      bg: ansiToken.background
-        ? "name" in ansiToken.background
-          ? RGBA.fromHex(colorPalette.value(ansiToken.background))
-          : "rgb" in ansiToken.background
-            ? RGBA.fromValues(...rgbToRGBA(ansiToken.background.rgb))
-            : undefined
-        : undefined,
-      attributes: createTextAttributes({
-        bold: ansiToken.decorations.has("bold"),
-        italic: ansiToken.decorations.has("italic"),
-        underline: ansiToken.decorations.has("underline"),
-        dim: ansiToken.decorations.has("dim"),
-        strikethrough: ansiToken.decorations.has("strikethrough"),
-      }),
-    };
-  });
-  return textChunks;
-};
-
-const ansiToTextToken = (text: string, ctx: RenderContext, id?: string) => {
-  if (id) {
-    return new TextRenderable(ctx, {
-      content: new StyledText(ansiToTextChunks(text)),
-      id: id,
-      wrapMode: "word",
-      width: "100%",
-    });
-  }
-  const textToken = new TextRenderable(ctx, {
-    content: new StyledText(ansiToTextChunks(text)),
-    wrapMode: "word",
-  });
-  return textToken;
-};
-//#endregion
-
-async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
-  if (tableToken.type !== "table")
-    throw new Error(
-      `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
-    );
-  console.log({
-    ctxWidth: ctx.width,
-    ctxHeight: ctx.height,
-    terminalWidth: ctx.terminalWidth,
-    terminalHeight: ctx.terminalHeight,
-    resolution: ctx.resolution,
-  });
-  const table = new BoxRenderable(ctx, {
-    width: "100%",
-    maxWidth: ctx.width - 3,
-    gap: 0,
-  });
-  const maxCellWidth = Math.round(
-    ((ctx.terminalWidth ?? 80) - 2)
-    / Math.max(...tableToken.content.map((arr) => arr.length)),
-  );
-  const minWidth = 4;
-  const cellContentWidths: number[] = await Promise.all(
-    tableToken.content.flatMap((row) =>
-      row.map(async (cell) => {
-        const widths = await Promise.all(
-          cell.content.map(async (token) => {
-            if (token.type === "text") {
-              return Math.max(
-                ...token.content.chunks.map((chunk) =>
-                  Bun.stringWidth(chunk.text),
-                ),
-              );
-            }
-            if (token.type === "image") {
-              const buf = await token.content.imageBuffer;
-              if (!buf) return minWidth;
-              const { width } = await token.content.getImageSize(
-                ctx,
-                buf,
-                (ctx.width - 40)
-                / Math.max(...tableToken.content.map((row) => row.length)),
-                cell.content.length > 1,
-              );
-              return width + 2;
-            }
-            return minWidth;
-          }),
-        );
-        return Math.max(...widths);
-      }),
-    ),
-  );
-  const maxCellContentWidth = Math.max(4, Math.max(...cellContentWidths) + 3);
-  let cellWidth = Math.min(maxCellWidth, maxCellContentWidth);
-  console.log({
-    maxCellWidth,
-    maxCellContentWidth,
-    cellWidth,
-  });
-  for (let rowIndex = 0; rowIndex < tableToken.content.length; rowIndex++) {
-    const row = tableToken.content[rowIndex]!;
-    const isFirstRow = rowIndex === 0;
-    const isLastRow = rowIndex === tableToken.content.length - 1;
-    const rowRenderable = new BoxRenderable(ctx, {
-      width: "100%",
-      gap: 0,
-      flexDirection: "row",
-      flexWrap: "no-wrap",
-    });
-    for (let cellIndex = 0; cellIndex < row.length; cellIndex++) {
-      const cell = row[cellIndex]!;
-      const isFirstColumn = cellIndex === 0;
-      const isLastColumn = cellIndex === row.length - 1;
-      const borders: BorderSides[] = [
-        "bottom",
-        "right",
-        ...(isFirstRow ? ["top" as const] : []),
-        ...(isFirstColumn ? ["left" as const] : []),
-      ];
-      const cellRenderable = new BoxRenderable(ctx, {
-        alignItems: cell.properties.textAlign,
-        border: borders,
-        width: cellWidth,
-        flexShrink: 1,
-        padding: 1,
-        customBorderChars: {
-          topLeft: isFirstRow && isFirstColumn ? "╭" : "┼",
-          topRight: isFirstRow ? (isLastColumn ? "╮" : "┬") : "┼",
-          bottomLeft: isLastRow ? "╰" : "├",
-          bottomRight: isLastRow
-            ? isLastColumn
-              ? "╯"
-              : "┴"
-            : isLastColumn
-              ? "┤"
-              : "┼",
-          horizontal: "─",
-          vertical: "│",
-          topT: isFirstRow ? "┬" : "┼",
-          bottomT: isLastRow ? "┴" : "┼",
-          leftT: "├",
-          rightT: "┤",
-          cross: " ",
-        },
-      });
-      for (const item of cell.content) {
-        if (item.type === "text") {
-          const contentLength = Bun.stringWidth(
-            item.content.chunks.map((chunk) => chunk.text).join(),
-          );
-          if (contentLength % 2 === 1) {
-            cellWidth += 1;
-          }
-          cellRenderable.add(
-            new TextRenderable(ctx, {
-              content: item.content,
-            }),
-          );
-        } else if (item.type === "image") {
-          if (args.values.noRenderImages) {
-            cellRenderable.add(
-              new TextRenderable(ctx, {
-                content: item.content.imageAlt,
-                fg: "gray",
-              }),
-            );
-            continue;
-          }
-          cellRenderable.add(
-            item.content.load(
-              ctx,
-              (ctx.width - 40)
-              / Math.max(...tableToken.content.map((row) => row.length)),
-              cell.content.length > 1,
-            ),
-          );
-        } else {
-          throw new Error(
-            `Type not recognized: expected "text" or "image" but got ${item.type}`,
-          );
-        }
-      }
-      rowRenderable.add(cellRenderable);
-    }
-    table.add(rowRenderable);
-    table
-      .getChildren()
-      .forEach((row) =>
-        row.getChildren().forEach((cell) => (cell.width = cellWidth)),
-      );
-  }
-  return table;
-}
-
-export async function renderMarkdown(
-  tokens: ProcessedToken[],
-  ctx: RenderContext,
-) {
-  const componentArray: Renderable[] = [];
-  //#region
-  for (const token of tokens) {
-    //#region switch token type
-    switch (token.type) {
-      //#region paragraph/text
-      case "text":
-        const content = token.content;
-        componentArray.push(
-          new TextRenderable(ctx, {
-            content,
-            alignSelf: token.properties.align ?? "left",
-          }),
-        );
-        break;
-      case "paragraph": {
-        const content = token.content;
-        const tokenAlign = token.properties.align;
-        const alignment = tokenAlign
-          ? tokenAlign === "left"
-            ? "flex-start"
-            : tokenAlign === "right"
-              ? "flex-end"
-              : tokenAlign
-          : "flex-start";
-        const paragraphBox = new BoxRenderable(ctx, {
-          padding: 0,
-          alignItems: alignment,
-          ...(content.every((element) => element.type === "image") && {
-            flexDirection: "row",
-            justifyContent: "flex-start",
-            columnGap: 1,
-            alignSelf: alignment,
-          }),
-        });
-        for (const element of content) {
-          if (element.type === "image") {
-            const image = element.content;
-            paragraphBox.add(
-              args.values.noRenderImages
-                ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
-                : image.load(
-                  ctx,
-                  ctx.width - 2,
-                  content.length > 1, // this argument is a boolean!
-                ),
-            );
-          } else if (element.type === "text") {
-            paragraphBox.add(
-              new TextRenderable(ctx, { content: element.content }),
-            );
-          }
-        }
-        componentArray.push(paragraphBox);
-        break;
-      }
-      //#endregion
-      //#region headings
-      case "heading":
-        if (typeof token.content === "string") throw new Error("What?");
-        const tokenContent: HeadingObject = token.content as HeadingObject;
-
-        if (args.values.noRenderHeadings) {
-          const colorMap: Record<number, (str: string) => StyledText> = {
-            1: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#ffa50a") },
-              ]),
-            2: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#eeee00") },
-              ]),
-            3: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#0acadd") },
-              ]),
-            4: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#ffa5a5") },
-              ]),
-            5: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#22ff22") },
-              ]),
-            6: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#aaaaaa") },
-              ]),
-          };
-          const str = colorMap[tokenContent.level]!(
-            "#".repeat(tokenContent.level) + " " + tokenContent.text,
-          );
-          const level = tokenContent.level;
-          headingIndexes[level - 1]!++;
-          for (let i = level; i < headingIndexes.length; i++) {
-            headingIndexes[i] = 0;
-          }
-          const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
-          const heading = new TextRenderable(ctx, {
-            content: str,
-            alignSelf: token.properties.align ?? "left",
-          });
-          componentArray.push(heading);
-          if (tokenContent.links.chunks.length > 0) {
-            componentArray.push(
-              new TextRenderable(ctx, {
-                content: tokenContent.links,
-                alignSelf: token.properties.align ?? "left",
-              }),
-            );
-          }
-          headingsArrayForToc.push({
-            text: tokenContent.text,
-            level: tokenContent.level,
-            id: headingId,
-            renderable: heading,
-          });
-          break;
-        }
-
-        const level = tokenContent.level;
-        headingIndexes[level - 1]!++;
-        for (let i = level; i < headingIndexes.length; i++) {
-          headingIndexes[i] = 0;
-        }
-        const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
-        const heading = new BoxRenderable(ctx, {
-          id: headingId,
-          flexDirection: "row",
-          flexWrap: "wrap",
-          alignSelf: token.properties.align ?? "left",
-        });
-        heading.add(
-          new TextRenderable(ctx, {
-            content: await makeFigletFont(
-              tokenContent.text,
-              tokenContent.level,
-              "left",
-            ),
-          }),
-        );
-        componentArray.push(heading);
-        if (tokenContent.links.chunks.length > 0) {
-          componentArray.push(
-            new TextRenderable(ctx, {
-              content: tokenContent.links,
-              alignSelf: token.properties.align ?? "left",
-            }),
-          );
-        }
-        headingsArrayForToc.push({
-          text: tokenContent.text,
-          level: tokenContent.level,
-          id: headingId,
-          renderable: heading,
-        });
-        break;
-      //#endregion
-      //#region table
-      case "table":
-        componentArray.push(await renderTable(ctx, token));
-        break;
-      //#endregion
-      //#region bullet list
-      case "bullet_list":
-        const bp = "\u2022";
-        const bulletListbox = new BoxRenderable(ctx, {
-          alignItems: token.properties.align ?? "left",
-        });
-        for (const listItem of token.content) {
-          const transformedListItem = makeTaskList(listItem);
-          const listContent = transformedListItem.content;
-          const listRenderables = await renderMarkdown(listContent, ctx);
-          listRenderables.forEach((listRenderable, index) => {
-            if (index > 0) listRenderable.marginTop = 1;
-            bulletListbox.add(
-              Box(
-                {
-                  flexDirection: "row",
-                  gap: 1,
-                },
-                Text({ content: index === 0 ? bp : " " }),
-                Box({}, listRenderable),
-              ),
-            );
-          });
-        }
-        componentArray.push(bulletListbox);
-        break;
-      //#endregion
-      //#region ordered list
-      case "ordered_list":
-        let number = token.properties.start || 1;
-        const initialNumber = number;
-        const orderedListBox = new BoxRenderable(ctx, {
-          alignSelf: token.properties.align ?? "left",
-          alignItems: token.properties.align ?? "left",
-        });
-        for (const listItem of token.content as ProcessedToken[]) {
-          if (listItem.type !== "list_item")
-            throw new Error(
-              `Expected type "list_item" but got ${listItem.type}`,
-            );
-          const transformedListItem = makeTaskList(listItem);
-          const listContent = transformedListItem.content;
-          const listRenderables = await renderMarkdown(listContent, ctx);
-          const markerWidth = listRenderables.length + initialNumber - 1;
-          listRenderables.forEach((listRenderable, index) => {
-            orderedListBox.add(
-              Box(
-                {
-                  flexDirection: "row",
-                  gap: 1,
-                },
-                Text({
-                  content:
-                    index === 0
-                      ? `${String(number).padStart(markerWidth)}.`
-                      : " ",
-                }),
-                Box({}, listRenderable),
-              ),
-            );
-            number++;
-          });
-        }
-        componentArray.push(orderedListBox);
-        break;
-      //#endregion
-      //#region blockquote
-      case "blockquote":
-        const uhb = "\u258c"; // unicode left half block
-        const blockquoteBox = new BoxRenderable(ctx, {
-          alignItems: token.properties.align ?? "left",
-          alignSelf: token.properties.align ?? "left",
-        });
-        const blockquoteRenderables = await renderMarkdown(
-          token.content as ProcessedToken[],
-          ctx,
-        );
-        blockquoteRenderables.forEach((renderable) =>
-          blockquoteBox.add(
-            Box(
-              {
-                paddingLeft: 1,
-                border: ["left"],
-                customBorderChars: {
-                  bottomLeft: uhb,
-                  bottomRight: uhb,
-                  topLeft: uhb,
-                  topRight: uhb,
-                  vertical: uhb,
-                  horizontal: uhb,
-                  topT: uhb,
-                  bottomT: uhb,
-                  leftT: uhb,
-                  rightT: uhb,
-                  cross: uhb,
-                },
-              },
-              renderable,
-            ),
-          ),
-        );
-        componentArray.push(blockquoteBox);
-        break;
-      //#endregion
-      //#region alerts
-      case "alert": {
-        const alertIcons: Record<
-          string,
-          { icon: string; color: string; name: string }
-        > = {
-          note: { icon: "\uf129", color: "#6af", name: "Note" },
-          tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
-          important: { icon: "\uf12a", color: "#96f", name: "Important" },
-          warning: { icon: "\uea6c", color: "#dd4", name: "Warning" },
-          caution: { icon: "\u{f0ce6}", color: "#f44", name: "Caution" },
-        };
-        const uhb = "\u258c"; // unicode left half block
-        const alertType = token.properties.alertType;
-        const alertIconAndColor = alertIcons[alertType];
-        const alertBox = new BoxRenderable(ctx, {
-          border: ["left"],
-          paddingLeft: 1,
-          customBorderChars: {
-            bottomLeft: uhb,
-            bottomRight: uhb,
-            topLeft: uhb,
-            topRight: uhb,
-            vertical: uhb,
-            horizontal: uhb,
-            topT: uhb,
-            bottomT: uhb,
-            leftT: uhb,
-            rightT: uhb,
-            cross: uhb,
-          },
-          rowGap: 1,
-          borderColor: RGBA.fromHex(alertIconAndColor?.color || ""),
-        });
-        alertBox.add(
-          Text({
-            content: `${alertIconAndColor?.icon} ${alertIconAndColor?.name}`,
-            fg: RGBA.fromHex(alertIconAndColor?.color || ""),
-          }),
-        );
-        (await renderMarkdown(token.content, ctx)).forEach((renderable) =>
-          alertBox.add(renderable),
-        );
-        componentArray.push(alertBox);
-        break;
-      }
-      //#endregion
-      //#region code block
-      case "codeBlock":
-        const codeTokenContent = token.content as {
-          code: string;
-          language: string;
-        };
-        const language = codeTokenContent.language;
-        const icon =
-          languageToNerdFontIconMap[language]
-          ?? languageToNerdFontIconMap.default;
-        const box = new BoxRenderable(ctx, {
-          paddingLeft: 2,
-          paddingRight: 2,
-          paddingTop: 1,
-          marginLeft: 1,
-          rowGap: 1,
-          backgroundColor: "#181825",
-          width: "auto",
-          minWidth: 40,
-          flexShrink: 0,
-          flexGrow: 0,
-          alignSelf: "flex-start",
-        });
-        box.add(
-          Text({
-            content: `${icon} ${language}`,
-          }),
-        );
-        box.add(
-          Text({
-            content: new StyledText(ansiToTextChunks(codeTokenContent.code)),
-          }),
-        );
-        componentArray.push(box);
-        break;
-      //#endregion
-      //#region div
-      case "div":
-        const divBox = new BoxRenderable(ctx, {
-          flexDirection: "column",
-          width: "100%",
-          alignSelf: token.properties.align ?? "left",
-          alignItems: token.properties.align ?? "left",
-        });
-        const divBoxRenderables = await renderMarkdown(
-          token.content as ProcessedToken[],
-          ctx,
-        );
-        divBoxRenderables.forEach((renderable) => divBox.add(renderable));
-        componentArray.push(divBox);
-        break;
-      //#endregion
-      //#region details
-      case "details":
-        const detailsId = crypto.randomUUID();
-        const detailsContent = token.content;
-        const isOpen = token.properties.open;
-        const summaryToken = detailsContent.find((t) => t.type === "summary");
-        const summaryText = new BoxRenderable(ctx, {});
-        if (summaryToken)
-          (await renderMarkdown(summaryToken.content, ctx)).forEach(
-            (renderable) => summaryText.add(renderable),
-          );
-        const detailsBox = Box({
-          id: `details-element-${detailsId}`,
-          visible: isOpen ? true : false,
-          alignSelf: token.properties.align ?? "left",
-          alignItems: token.properties.align ?? "left",
-          rowGap: 1,
-        });
-        (
-          await renderMarkdown(
-            detailsContent.find((t) => t.type === "content")!.content,
-            ctx,
-          )
-        ).forEach((renderable) => detailsBox.add(renderable)); // the content of the details element
-        const openIndicator = Text({
-          content: "⏵",
-          visible: isOpen ? false : true,
-          id: `closed-indicator-${detailsId}`,
-        });
-        const closedIndicator = Text({
-          content: "⏷",
-          visible: isOpen ? true : false,
-          id: `open-indicator-${detailsId}`,
-        });
-        const indicators = Box(
-          { id: `indicators-details-${detailsId}` },
-          openIndicator,
-          closedIndicator,
-        );
-        const onSelect = () => {
-          const detailsElement = summaryBox.findDescendantById(
-            `details-element-${detailsId}`,
-          );
-          if (detailsElement) detailsElement.visible = !detailsElement.visible;
-          openIndicator.visible = !openIndicator.visible;
-          closedIndicator.visible = !closedIndicator.visible;
-        };
-        const summaryBox = new BoxRenderable(ctx, {
-          width: "100%",
-          flexDirection: "column",
-          rowGap: 1,
-          id: detailsId,
-        });
-        const summaryTextRenderable = new BoxRenderable(ctx, {
-          flexDirection: "row",
-          gap: 1,
-          focusable: true,
-          onMouseDown: onSelect,
-          onKeyDown: (key: KeyEvent) => {
-            if (key.name === "space" || key.name === "return") {
-              onSelect();
-              summaryBox.border = openIndicator!.visible ? false : ["right"];
-              summaryBox.paddingRight = openIndicator!.visible ? 1 : 0;
-            }
-          },
-        });
-        summaryTextRenderable.add(indicators);
-        summaryTextRenderable.add(summaryText);
-        summaryTextRenderable.on(RenderableEvents.FOCUSED, () => {
-          summaryTextRenderable.backgroundColor = RGBA.fromHex("#333");
-        });
-        summaryTextRenderable.on(RenderableEvents.BLURRED, () => {
-          summaryTextRenderable.backgroundColor = "transparent";
-        });
-        summaryBox.add(summaryTextRenderable);
-        summaryBox.add(detailsBox);
-        componentArray.push(summaryBox);
-        detailsElementsArray.push(summaryTextRenderable);
-        break;
-      //#endregion
-      //#region default
-      default:
-        console.warn("DEFAULT CASE:", token);
-        console.warn("args in current renderMarkdown() call:", tokens.length);
-        componentArray.push(ansiToTextToken(String(token.content), ctx));
-      //#endregion
-    }
-    //#endregion
-  }
-  //#endregion
-  return componentArray;
-}
 
 //#region handle stdin
 const terminalInput = process.stdin.isTTY
@@ -1426,7 +320,7 @@ const noFilesFoundText = new TextRenderable(renderer, {
 });
 homeRenderable.add(
   new TextRenderable(renderer, {
-    content: await makeFigletFont("remder", 1, "left"),
+    content: await makeFigletFont("remder", 1, "left", args.values.width),
   }),
 );
 homeRenderable.add(noFilesFoundText);
@@ -1463,9 +357,16 @@ const fuzzysortSnapshot = fuzzysort.snapshot(optionsArray, { key: "value" });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   const content = await Bun.file(opt.value).text();
   const rendered = await stylize(parseInput(content), opt.value);
-  (await renderMarkdown(rendered, renderer)).forEach((renderable) =>
-    contentScrollBox.add(renderable),
-  );
+  (
+    await renderMarkdown(
+      rendered,
+      renderer,
+      languageToNerdFontIconMap,
+      args.values.noRenderHeadings,
+      args.values.noRenderImages,
+      args.values.width,
+    )
+  ).forEach((renderable) => contentScrollBox.add(renderable));
   root.add(contentScrollBox);
   contentScrollBox.focus();
   focusedElement = "content";
@@ -1767,7 +668,14 @@ if (args.positionals.length > 0) {
     }
   }
   const tokens = await stylize(parseInput(fileContent), filePath || "");
-  const renderables = await renderMarkdown(tokens, renderer);
+  const renderables = await renderMarkdown(
+    tokens,
+    renderer,
+    languageToNerdFontIconMap,
+    args.values.noRenderHeadings,
+    args.values.noRenderImages,
+    args.values.width,
+  );
   renderables.forEach((renderable) => {
     contentScrollBox.add(renderable);
   });
@@ -1779,7 +687,14 @@ if (args.positionals.length > 0) {
   //#region handle piped input on non-windows systems
   const md = await Bun.stdin.text();
   const tokens = await stylize(parseInput(md), "");
-  const renderables = await renderMarkdown(tokens, renderer);
+  const renderables = await renderMarkdown(
+    tokens,
+    renderer,
+    languageToNerdFontIconMap,
+    args.values.noRenderHeadings,
+    args.values.noRenderImages,
+    args.values.width,
+  );
   const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
   renderables.forEach((renderable) => box.add(renderable));
   box.focus();

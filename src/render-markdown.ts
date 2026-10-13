@@ -50,10 +50,8 @@ async function renderTable(
     maxWidth: ctx.width - 3,
     gap: 0,
   });
-  const maxCellWidth = Math.round(
-    ((ctx.terminalWidth ?? 80) - 2)
-    / Math.max(...tableToken.content.map((arr) => arr.length)),
-  );
+  const columnCount = Math.max(...tableToken.content.map((arr) => arr.length));
+  const maxCellWidth = Math.floor(((ctx.width ?? 80) - 3) / columnCount);
   const minWidth = 4;
   const cellContentWidths: number[] = await Promise.all(
     tableToken.content.flatMap((row) =>
@@ -61,23 +59,21 @@ async function renderTable(
         const widths = await Promise.all(
           cell.content.map(async (token) => {
             if (token.type === "text") {
-              return Math.max(
-                ...token.content.chunks.map((chunk) =>
-                  Bun.stringWidth(chunk.text),
-                ),
+              return Bun.stringWidth(
+                token.content.chunks.map((chunk) => chunk.text).join(""),
               );
             }
             if (token.type === "image") {
               const buf = await token.content.imageBuffer;
               if (!buf) return minWidth;
-              const { width } = await token.content.getImageSize(
-                ctx,
-                buf,
-                (ctx.width - 40)
-                / Math.max(...tableToken.content.map((row) => row.length)),
-                cell.content.length > 1,
-              );
-              return width + 2;
+              const { width, cellWidth: columnWidth } =
+                await token.content.getImageSize(
+                  ctx,
+                  buf,
+                  Math.max(1, maxCellWidth - 1),
+                  cell.content.length > 1,
+                );
+              return width / columnWidth + 2;
             }
             return minWidth;
           }),
@@ -94,6 +90,9 @@ async function renderTable(
     cellWidth,
   });
   for (let rowIndex = 0; rowIndex < tableToken.content.length; rowIndex++) {
+    // this style of loop is used over `for (const row of tableToken.content)`
+    // because rowIndex is used repeatedly and this is much more convenient
+    // and i don't have to figure out anything
     const row = tableToken.content[rowIndex]!;
     const isFirstRow = rowIndex === 0;
     const isLastRow = rowIndex === tableToken.content.length - 1;
@@ -141,12 +140,6 @@ async function renderTable(
       });
       for (const item of cell.content) {
         if (item.type === "text") {
-          const contentLength = Bun.stringWidth(
-            item.content.chunks.map((chunk) => chunk.text).join(),
-          );
-          if (contentLength % 2 === 1) {
-            cellWidth += 1;
-          }
           cellRenderable.add(
             new TextRenderable(ctx, {
               content: item.content,
@@ -165,8 +158,7 @@ async function renderTable(
           cellRenderable.add(
             item.content.load(
               ctx,
-              (ctx.width - 40)
-              / Math.max(...tableToken.content.map((row) => row.length)),
+              Math.max(1, cellWidth - (isFirstColumn ? 2 : 1)),
               cell.content.length > 1,
             ),
           );

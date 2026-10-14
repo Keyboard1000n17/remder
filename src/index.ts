@@ -268,6 +268,7 @@ import {
   renderMarkdown,
   headingsArrayForToc,
   detailsElementsArray,
+  resetDocumentState,
 } from "./render-markdown";
 import parseInput from "./parse-input.js";
 import stylize from "./stylize.js";
@@ -355,6 +356,7 @@ const menu = new SelectRenderable(renderer, {
 homeRenderable.add(menu);
 const fuzzysortSnapshot = fuzzysort.snapshot(optionsArray, { key: "value" });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
+  resetDocumentState();
   const content = await Bun.file(opt.value).text();
   const rendered = await stylize(parseInput(content), opt.value);
   (
@@ -368,6 +370,18 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
     )
   ).forEach((renderable) => contentScrollBox.add(renderable));
   root.add(contentScrollBox);
+  if (tocBox) {
+    root.remove(tocBox);
+    tocMenu.options = headingsArrayForToc.map((heading) => {
+      const headingNumber = heading.id.split("-").at(-1)?.padStart(2, "0");
+      return {
+        name: `${"  ".repeat(heading.level - 1)}${headingNumber} ${heading.text}`,
+        description: "",
+        value: heading.id,
+      };
+    });
+    root.add(tocBox);
+  }
   contentScrollBox.focus();
   focusedElement = "content";
   homeRenderable.visible = false;
@@ -611,6 +625,7 @@ keymap.registerLayer({
     {
       name: "app.goToFileMenu",
       run() {
+        tocMenu.options = [];
         contentScrollBox
           .getChildren()
           .forEach((child) => contentScrollBox.remove(child));

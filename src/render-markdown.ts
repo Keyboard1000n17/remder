@@ -21,14 +21,15 @@ import {
 } from "./utility-functions";
 
 const headingIndexes = [0, 0, 0, 0, 0, 0];
-const headingsArray: {
+export const headingsArrayForToc: {
   text: string;
   level: number;
   id: string;
   renderable: Renderable;
 }[] = []; // holds an array of all the headings in the document
 
-const detailsElements: Renderable[] = [];
+export const detailsElementsArray: Renderable[] = [];
+
 async function renderTable(
   ctx: RenderContext,
   tableToken: ProcessedToken,
@@ -299,7 +300,7 @@ export async function renderMarkdown(
               }),
             );
           }
-          headingsArray.push({
+          headingsArrayForToc.push({
             text: tokenContent.text,
             level: tokenContent.level,
             id: headingId,
@@ -339,7 +340,7 @@ export async function renderMarkdown(
             }),
           );
         }
-        headingsArray.push({
+        headingsArrayForToc.push({
           text: tokenContent.text,
           level: tokenContent.level,
           id: headingId,
@@ -635,11 +636,11 @@ export async function renderMarkdown(
           closedIndicator,
         );
         const onSelect = () => {
-          const detailsElements = summaryBox.findDescendantById(
+          const detailsElementsArray = summaryBox.findDescendantById(
             `details-element-${detailsId}`,
           );
-          if (detailsElements)
-            detailsElements.visible = !detailsElements.visible;
+          if (detailsElementsArray)
+            detailsElementsArray.visible = !detailsElementsArray.visible;
           openIndicator.visible = !openIndicator.visible;
           closedIndicator.visible = !closedIndicator.visible;
         };
@@ -673,7 +674,7 @@ export async function renderMarkdown(
         summaryBox.add(summaryTextRenderable);
         summaryBox.add(detailsBox);
         componentArray.push(summaryBox);
-        detailsElements.push(summaryTextRenderable);
+        detailsElementsArray.push(summaryTextRenderable);
         break;
       //#endregion
       //#region horizontal rule
@@ -699,9 +700,9 @@ export async function renderMarkdown(
   //#endregion
   return componentArray;
 }
-export const headingsArrayForToc: ReadonlyArray<
-  (typeof headingsArray)[number]
-> = headingsArray;
-export const detailsElementsArray: ReadonlyArray<
-  (typeof detailsElements)[number]
-> = detailsElements;
+
+export function resetDocumentState() {
+  headingsArrayForToc.length = 0;
+  detailsElementsArray.length = 0;
+  headingIndexes.fill(0);
+}

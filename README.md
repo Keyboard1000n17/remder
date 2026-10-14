@@ -32,7 +32,7 @@ file, and finally the flags, if any. You can supply a relative or absolute path;
 it doesn't matter which you choose. You can also type your flags before the
 filename.
 
-```shell
+```bash
 remder -i README.md
 ```
 
@@ -42,7 +42,7 @@ remder has several flags to modify the experience, listed here:
 
   This option simply prints the help text and exits.
 
-  ```shell
+  ```bash
   remder --help
   remder -h
   ```
@@ -51,7 +51,7 @@ remder has several flags to modify the experience, listed here:
 
   This option allows you to press `C` (shift+c) to bring up the console.
 
-  ```shell
+  ```bash
   remder --debug
   remder -d
   ```
@@ -61,7 +61,7 @@ remder has several flags to modify the experience, listed here:
   Don't like the ASCII art headings? You can use this flag to disable those and
   use normal colored text instead!
 
-  ```shell
+  ```bash
   remder --no-render-headings
   remder -H
   ```
@@ -72,7 +72,7 @@ remder has several flags to modify the experience, listed here:
   (usually a result of rendering images with block characters), you can set this
   flag to simply show their alt text instead.
 
-  ```shell
+  ```bash
   remder --disable-images
   remder -i
   ```
@@ -82,7 +82,7 @@ remder has several flags to modify the experience, listed here:
   If you want your styled text printed straight to the terminal, you have this
   option!
 
-  ```shell
+  ```bash
   remder --print-to-stdout
   remder -o
   ```
@@ -92,7 +92,7 @@ remder has several flags to modify the experience, listed here:
   Set the width of the TUI or the rendered text. The default is the terminal
   width.
 
-  ```shell
+  ```bash
   remder --width 80
   remder -w 80
   ```
@@ -102,7 +102,7 @@ remder has several flags to modify the experience, listed here:
   Set the height of the TUI. This flag has no effect on rendered text. The
   default is the terminal height.
 
-  ```shell
+  ```bash
   remder --height 40
   remder -h 40
   ```
@@ -113,24 +113,24 @@ If you want to set multiple flags at once:
 
 - If you are using **long flags** (for example `--no-render-headings`–they're
   the ones with the double dashes), you can combine them like this:
-  ```shell
+  ```bash
   remder --debug --disable-images --no-render-headings
   ```
   However, this is not recommended because of the verbosity i.e how much you
   have to type. Instead,
 - Using **short flags** (for example `-H`–these are the ones with only one
   dash), you can combine them like this
-  ```shell
+  ```bash
   remder -d -i -H
   ```
   or even like this
-  ```shell
+  ```bash
   remder -diH
   ```
   The exceptions to this are the `-y` (`--height`) and the `-w` (`--width`)
   options. Since they take values, you cannot just join them like this. You need
   to specify them separately.
-  ```shell
+  ```bash
   remder -di -w 80
   ```
   This is not specific to remder, it is a feature of most shells. However, you

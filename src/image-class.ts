@@ -185,11 +185,17 @@ export default class Image {
     parentWidth: number,
     makeOneRowHigh: boolean,
   ) {
-    const tempBuf = await this.imageBuffer!;
+    const tempBuf = await this.imageBuffer;
     if (tempBuf === undefined) {
       this.loadState = "loaded";
       spinner.visible = false;
       wrapper.remove(spinner);
+      wrapper.add(
+        new TextRenderable(ctx, {
+          content: `\u{f082b} ${this.imageAlt}`,
+          fg: "gray",
+        }),
+      );
       return;
     }
     const { cellWidth, rowHeight, shouldUseWidth, width, height, imageType } =

@@ -68,7 +68,7 @@ export default class Image {
     );
     try {
       let properPath;
-      const pathSeparator = /(?<!(:\/|:|\\))\//;
+      const pathSeparator = /(?<!:\/|:|\\)\//;
       // this regex matches a `/` if it is not preceded by `:/`, `:`, or `\`
       const filePathArray = filePath.split(pathSeparator).slice(0, -1);
       const pathArray = path.split(pathSeparator);
@@ -88,7 +88,9 @@ export default class Image {
         }
         properPath = filePathArray.join("/");
       }
-      logger.info(`path is ${properPath}`);
+      logger.info(
+        `path is ${properPath}. file path array was ${JSON.stringify(filePathArray)}. supplied image path was ${path}`,
+      );
       return URL.canParse(properPath)
         ? (await got(properPath, { retry: { limit: 2 } })).rawBody
         : await Bun.file(properPath).bytes();

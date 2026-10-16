@@ -298,6 +298,32 @@ const renderer = await createCliRenderer({
   },
 });
 
+const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+function loadSpinner(parent: ScrollBoxRenderable) {
+  // i had chatgpt generate this because i'm not exactly the most productive
+  let frame = 0;
+  const spinner = new TextRenderable(renderer, {
+    content: `${spinnerFrames[frame]} Loading...`,
+    width: "100%",
+  });
+  parent.add(spinner);
+  const interval = setInterval(() => {
+    frame = (frame + 1) % spinnerFrames.length;
+    spinner.content = `${spinnerFrames[frame]} Loading...`;
+  }, 80);
+  return () => {
+    clearInterval(interval);
+    if (parent.getChildren().includes(spinner)) {
+      parent.remove(spinner);
+    }
+  };
+}
+
+const loadingText = new TextRenderable(renderer, {
+  content: `${spinnerFrames[0]} Loading...`,
+  width: "100%",
+});
+
 flushLogBuffer();
 
 const root = new BoxRenderable(renderer, {
@@ -357,35 +383,48 @@ homeRenderable.add(menu);
 const fuzzysortSnapshot = fuzzysort.snapshot(optionsArray, { key: "value" });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   resetDocumentState();
-  const content = await Bun.file(opt.value).text();
-  const rendered = await stylize(parseInput(content), opt.value);
-  (
-    await renderMarkdown(
-      rendered,
-      renderer,
-      languageToNerdFontIconMap,
-      args.values.noRenderHeadings,
-      args.values.noRenderImages,
-      args.values.width,
-    )
-  ).forEach((renderable) => contentScrollBox.add(renderable));
+  contentScrollBox
+    .getChildren()
+    .forEach((child) => contentScrollBox.remove(child));
+  const removeSpinner = loadSpinner(contentScrollBox);
+  // loadSpinner returns a function that removes the spinner when called!
   root.add(contentScrollBox);
-  if (tocBox) {
-    root.remove(tocBox);
-    tocMenu.options = headingsArrayForToc.map((heading) => {
-      const headingNumber = heading.id.split("-").at(-1)?.padStart(2, "0");
-      return {
-        name: `${"  ".repeat(heading.level - 1)}${headingNumber} ${heading.text}`,
-        description: "",
-        value: heading.id,
-      };
-    });
-    root.add(tocBox);
-  }
-  contentScrollBox.focus();
-  focusedElement = "content";
   homeRenderable.visible = false;
-  console.log(`selected option "${opt.name}`);
+  contentScrollBox.focus();
+  root.add(contentScrollBox);
+  focusedElement = "content";
+  try {
+    const content = await Bun.file(opt.value).text();
+    const rendered = await stylize(parseInput(content), opt.value);
+    (
+      await renderMarkdown(
+        rendered,
+        renderer,
+        languageToNerdFontIconMap,
+        args.values.noRenderHeadings,
+        args.values.noRenderImages,
+        args.values.width,
+      )
+    ).forEach((renderable) => contentScrollBox.add(renderable));
+    if (tocBox) {
+      root.remove(tocBox);
+      tocMenu.options = headingsArrayForToc.map((heading) => {
+        const headingNumber = heading.id.split("-").at(-1)?.padStart(2, "0");
+        return {
+          name: `${"  ".repeat(heading.level - 1)}${headingNumber} ${heading.text}`,
+          description: "",
+          value: heading.id,
+        };
+      });
+      root.add(tocBox);
+      contentScrollBox.remove(loadingText);
+    }
+    focusedElement = "content";
+    homeRenderable.visible = false;
+    console.log(`selected option "${opt.name}`);
+  } finally {
+    removeSpinner();
+  }
 });
 //#endregion
 
@@ -671,6 +710,8 @@ keymap.registerLayer({
 
 if (args.positionals.length > 0) {
   //#region handle supplied file
+  const removeSpinner = loadSpinner(contentScrollBox);
+  root.add(contentScrollBox);
   const filePath = args.positionals.at(-1);
   let fileContent = "";
   if (URL.canParse(filePath!)) {
@@ -679,6 +720,7 @@ if (args.positionals.length > 0) {
     try {
       fileContent = await Bun.file(filePath!).text();
     } catch (err) {
+      removeSpinner();
       throw new Error(`Encountered an error: ${err}`);
     }
   }
@@ -696,25 +738,30 @@ if (args.positionals.length > 0) {
   });
   contentScrollBox.focus();
   focusedElement = "content";
-  root.add(contentScrollBox);
+  removeSpinner();
   //#endregion
 } else if (!process.stdin.isTTY) {
   //#region handle piped input on non-windows systems
-  const md = await Bun.stdin.text();
-  const tokens = await stylize(parseInput(md), "");
-  const renderables = await renderMarkdown(
-    tokens,
-    renderer,
-    languageToNerdFontIconMap,
-    args.values.noRenderHeadings,
-    args.values.noRenderImages,
-    args.values.width,
-  );
   const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
-  renderables.forEach((renderable) => box.add(renderable));
   box.focus();
   focusedElement = "content";
   root.add(box);
+  const removeSpinner = loadSpinner(box);
+  try {
+    const md = await Bun.stdin.text();
+    const tokens = await stylize(parseInput(md), "");
+    const renderables = await renderMarkdown(
+      tokens,
+      renderer,
+      languageToNerdFontIconMap,
+      args.values.noRenderHeadings,
+      args.values.noRenderImages,
+      args.values.width,
+    );
+    renderables.forEach((renderable) => box.add(renderable));
+  } finally {
+    removeSpinner();
+  }
   //#endregion
 } else {
   menu.focus();

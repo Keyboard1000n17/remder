@@ -288,6 +288,14 @@ const terminalInput = process.stdin.isTTY
   ? process.stdin
   : new (await import("node:tty")).ReadStream(openSync(readStreamPath, "r+"));
 
+if (process.platform === "win32" && !process.stdin.isTTY) {
+  const warmup = () => { };
+  terminalInput.on("data", warmup);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  terminalInput.pause();
+  terminalInput.removeListener("data", warmup);
+}
+
 terminalInput.setRawMode?.(true);
 terminalInput.resume();
 //#endregion
@@ -498,7 +506,6 @@ searchBox.on(InputRenderableEvents.ENTER, (val: string) => {
 
 const keymap = createDefaultOpenTuiKeymap(renderer);
 keymap.registerLayer({
-  // target: root,
   commands: [
     //#region quit
     {
@@ -506,6 +513,7 @@ keymap.registerLayer({
       run() {
         renderer.destroy();
         terminalInput.destroy();
+        process.exit();
       },
     },
     //#endregion

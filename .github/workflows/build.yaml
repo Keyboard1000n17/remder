@@ -51,8 +51,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: remder-linux-64
-          path: dist/remder-linux-64
+          name: remder-linux-x64
+          path: dist/remder-linux-x64
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:

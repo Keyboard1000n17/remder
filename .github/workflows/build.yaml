@@ -86,8 +86,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: remder-binaries
+          name: remder-*
           path: dist
+          merge-multiple: true
 
       - name: Create release
         env:

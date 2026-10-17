@@ -27,6 +27,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: |
+          # if anyone wants to remove this if feel free or whatever
           if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
             echo "version must look like v1.2.3 (got: '$VERSION')"
             exit 1

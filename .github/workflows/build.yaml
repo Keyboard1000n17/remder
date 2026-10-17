@@ -72,7 +72,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: remder-windows-x64
-          path: dist/remder-windows-64.exe
+          path: dist/remder-windows-x64.exe
           if-no-files-found: error
 
   release:

@@ -280,9 +280,13 @@ let headingIndexForToc = 0;
 let detailsElementsIndex: number | null = null;
 
 //#region handle stdin
+// depending on the system, set the read stream path, we only need to
+// choose between CONIN$ and /dev/tty, since windows is the odd one out -
+// most other systems are unix so /dev/tty will suffice the rest.
+const readStreamPath = process.platform === "win32" ? "CONIN$" : "/dev/tty";
 const terminalInput = process.stdin.isTTY
   ? process.stdin
-  : new (await import("node:tty")).ReadStream(openSync("/dev/tty", "r+"));
+  : new (await import("node:tty")).ReadStream(openSync(readStreamPath, "r+"));
 
 terminalInput.setRawMode?.(true);
 terminalInput.resume();
@@ -741,7 +745,7 @@ if (args.positionals.length > 0) {
   removeSpinner();
   //#endregion
 } else if (!process.stdin.isTTY) {
-  //#region handle piped input on non-windows systems
+  //#region handle piped input
   const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
   box.focus();
   focusedElement = "content";

@@ -57,7 +57,9 @@ jobs:
 
   release:
     needs: build
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/master' }}
+    if:
+      ${{ github.event_name == 'workflow_dispatch' && inputs.release &&
+      github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

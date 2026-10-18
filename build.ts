@@ -17,6 +17,9 @@ for (const target of targets) {
       assets: ["./src/fonts"],
     },
     minify: true,
+    sourcemap: "linked",
+    bytecode: true,
+    format: "esm",
   });
 
   if (!result.success) {

@@ -1,3 +1,4 @@
+const initTime = performance.now();
 //#region args
 import { parseArgs } from "node:util";
 
@@ -280,13 +281,30 @@ let headingIndexForToc = 0;
 let detailsElementsIndex: number | null = null;
 
 //#region handle stdin
-// NOTE: chatgpt generated this part of the code, i can not be bothered to deal
-// with a bug in bun that has a pr waiting since june 12 2026
-// (oven-sh/bun#32153) (https://github.com/oven-sh/bun/pull/32153)
+/*
+   NOTE: chatgpt generated this part of the code, i can not be bothered to deal
+  with a bug in bun that has a pr waiting since june 12 2026
+  (oven-sh/bun#32153) (https://github.com/oven-sh/bun/pull/32153).
+ 
+  what this code does is it checks if stdin is a tty. if stdin is a tty at the
+  time of checking, the opentui renderer takes the normal stdin as input. but if
+  it isn't a tty, that means that some input is being piped into the program. in
+  that case, two things can happen:
+  1. if the os is windows, then first the piped input is awaited. when eof 
+     (end of file) is reached in the piped input, the await completes and the input
+     is stored in pipedMarkdown. once the piped input is over, we destroy the input
+     stream and close it. then, we try to reopen it, on which `terminalInput.setRawMode(true)`
+     will hopefully work. if it doesn't, it just crashes.
+  2. if the os is not windows, we assume it is a sort of unix implementation and open
+     an input stream on /dev/tty/
+  
+  the rest of the comments in this block are from chatgpt
+*/
+
 const stdinWasTTY = process.stdin.isTTY;
 // Consume the pipe before replacing stdin with the console.
 const pipedMarkdown =
-  !stdinWasTTY && args.positionals.length === 0
+  !stdinWasTTY && process.platform !== "win32" && args.positionals.length === 0
     ? await Bun.stdin.text()
     : undefined;
 const { ReadStream } = await import("node:tty");
@@ -326,6 +344,15 @@ const renderer = await createCliRenderer({
   consoleOptions: {
     sizePercent: 60,
   },
+});
+
+let firstFrameOccured = false;
+
+renderer.on("frame", () => {
+  if (firstFrameOccured) return;
+  firstFrameOccured = true;
+  const startupTime = performance.now() - initTime;
+  console.log(`Started in ${startupTime} ms`);
 });
 
 const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -778,7 +805,7 @@ if (args.positionals.length > 0) {
   root.add(box);
   const removeSpinner = loadSpinner(box);
   try {
-    const md = pipedMarkdown!;
+    const md = pipedMarkdown ?? (await Bun.stdin.text());
     const tokens = await stylize(parseInput(md), "");
     const renderables = await renderMarkdown(
       tokens,

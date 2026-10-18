@@ -287,13 +287,14 @@ const readStreamPath = process.platform === "win32" ? "CONIN$" : "/dev/tty";
 const terminalInput = process.stdin.isTTY
   ? process.stdin
   : new (await import("node:tty")).ReadStream(openSync(readStreamPath, "r+"));
-
 if (process.platform === "win32" && !process.stdin.isTTY) {
-  const warmup = () => { };
-  terminalInput.on("data", warmup);
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  terminalInput.pause();
-  terminalInput.removeListener("data", warmup);
+  const input = terminalInput as typeof terminalInput & {
+    $start?: () => void;
+  };
+  if (typeof input.$start !== "function") {
+    throw new Error("Bun could not initialize the Windows console stream");
+  }
+  input.$start();
 }
 
 terminalInput.setRawMode?.(true);

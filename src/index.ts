@@ -262,7 +262,7 @@ import {
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import fuzzysort from "fuzzysort";
 import { stat, glob } from "node:fs/promises";
-import { openSync } from "node:fs";
+import { closeSync, openSync } from "node:fs";
 import { makeFigletFont } from "./utility-functions";
 import {
   renderMarkdown,
@@ -280,21 +280,38 @@ let headingIndexForToc = 0;
 let detailsElementsIndex: number | null = null;
 
 //#region handle stdin
-// depending on the system, set the read stream path, we only need to
-// choose between CONIN$ and /dev/tty, since windows is the odd one out -
-// most other systems are unix so /dev/tty will suffice the rest.
-const readStreamPath = process.platform === "win32" ? "CONIN$" : "/dev/tty";
-const terminalInput = process.stdin.isTTY
-  ? process.stdin
-  : new (await import("node:tty")).ReadStream(openSync(readStreamPath, "r+"));
-if (process.platform === "win32" && !process.stdin.isTTY) {
-  const input = terminalInput as typeof terminalInput & {
-    $start?: () => void;
-  };
-  if (typeof input.$start !== "function") {
-    throw new Error("Bun could not initialize the Windows console stream");
+// NOTE: chatgpt generated this part of the code, i can not be bothered to deal
+// with a bug in bun that has a pr waiting since june 12 2026
+// (oven-sh/bun#32153) (https://github.com/oven-sh/bun/pull/32153)
+const stdinWasTTY = process.stdin.isTTY;
+// Consume the pipe before replacing stdin with the console.
+const pipedMarkdown =
+  !stdinWasTTY && args.positionals.length === 0
+    ? await Bun.stdin.text()
+    : undefined;
+const { ReadStream } = await import("node:tty");
+let terminalInput: NodeJS.ReadStream;
+if (stdinWasTTY) {
+  terminalInput = process.stdin;
+} else if (process.platform === "win32") {
+  process.stdin.pause();
+  process.stdin.destroy();
+  // The old pipe must release descriptor 0 first.
+  try {
+    closeSync(0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EBADF") {
+      throw error;
+    }
   }
-  input.$start();
+  const fd = openSync("\\\\.\\CONIN$", "r+");
+  if (fd !== 0) {
+    closeSync(fd);
+    throw new Error(`Expected CONIN$ on fd 0, got fd ${fd}`);
+  }
+  terminalInput = new ReadStream(fd);
+} else {
+  terminalInput = new ReadStream(openSync("/dev/tty", "r+"));
 }
 
 terminalInput.setRawMode?.(true);
@@ -753,7 +770,7 @@ if (args.positionals.length > 0) {
   focusedElement = "content";
   removeSpinner();
   //#endregion
-} else if (!process.stdin.isTTY) {
+} else if (!stdinWasTTY) {
   //#region handle piped input
   const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
   box.focus();
@@ -761,7 +778,7 @@ if (args.positionals.length > 0) {
   root.add(box);
   const removeSpinner = loadSpinner(box);
   try {
-    const md = await Bun.stdin.text();
+    const md = pipedMarkdown!;
     const tokens = await stylize(parseInput(md), "");
     const renderables = await renderMarkdown(
       tokens,

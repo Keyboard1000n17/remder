@@ -20,8 +20,8 @@ for (const target of targets) {
     sourcemap: "linked",
     bytecode: true,
     format: "esm",
+    features: target.includes("windows") ? ["WINDOWS_CONSOLE"] : [],
   });
-
   if (!result.success) {
     console.error(result.logs);
     process.exit(1);

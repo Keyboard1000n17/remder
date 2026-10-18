@@ -263,7 +263,7 @@ import {
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import fuzzysort from "fuzzysort";
 import { stat, glob } from "node:fs/promises";
-import { closeSync, openSync } from "node:fs";
+import { openSync } from "node:fs";
 import { makeFigletFont } from "./utility-functions";
 import {
   renderMarkdown,
@@ -274,7 +274,7 @@ import {
 import parseInput from "./parse-input.js";
 import stylize from "./stylize.js";
 import got from "got";
-
+import { feature } from "bun:bundle";
 //#endregion
 
 let headingIndexForToc = 0;
@@ -302,33 +302,20 @@ let detailsElementsIndex: number | null = null;
 */
 
 const stdinWasTTY = process.stdin.isTTY;
-// Consume the pipe before replacing stdin with the console.
-const pipedMarkdown =
-  !stdinWasTTY && process.platform !== "win32" && args.positionals.length === 0
-    ? await Bun.stdin.text()
-    : undefined;
 const { ReadStream } = await import("node:tty");
 let terminalInput: NodeJS.ReadStream;
+let restoreConsoleInput: (() => void) | undefined;
 if (stdinWasTTY) {
+  // Ordinary interactive terminal: preserve the existing behavior.
   terminalInput = process.stdin;
-} else if (process.platform === "win32") {
-  process.stdin.pause();
-  process.stdin.destroy();
-  // The old pipe must release descriptor 0 first.
-  try {
-    closeSync(0);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EBADF") {
-      throw error;
-    }
-  }
-  const fd = openSync("\\\\.\\CONIN$", "r+");
-  if (fd !== 0) {
-    closeSync(fd);
-    throw new Error(`Expected CONIN$ on fd 0, got fd ${fd}`);
-  }
-  terminalInput = new ReadStream(fd);
+} else if (process.platform === "win32" && feature("WINDOWS_CONSOLE")) {
+  // Piped stdin remains untouched. Read keyboard input separately.
+  const { openWindowsConsoleInput } = await import("./windows-console-input");
+  const consoleInput = openWindowsConsoleInput();
+  terminalInput = consoleInput.stream;
+  restoreConsoleInput = consoleInput.restore;
 } else {
+  // Unix: the pipe remains stdin, and /dev/tty provides keyboard input.
   terminalInput = new ReadStream(openSync("/dev/tty", "r+"));
 }
 
@@ -805,7 +792,7 @@ if (args.positionals.length > 0) {
   root.add(box);
   const removeSpinner = loadSpinner(box);
   try {
-    const md = pipedMarkdown ?? (await Bun.stdin.text());
+    const md = await Bun.stdin.text();
     const tokens = await stylize(parseInput(md), "");
     const renderables = await renderMarkdown(
       tokens,

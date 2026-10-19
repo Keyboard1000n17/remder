@@ -786,11 +786,10 @@ if (args.positionals.length > 0) {
   //#endregion
 } else if (!stdinWasTTY) {
   //#region handle piped input
-  const box = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
-  box.focus();
+  contentScrollBox.focus();
   focusedElement = "content";
-  root.add(box);
-  const removeSpinner = loadSpinner(box);
+  root.add(contentScrollBox);
+  const removeSpinner = loadSpinner(contentScrollBox);
   try {
     const md = await Bun.stdin.text();
     const tokens = await stylize(parseInput(md), "");
@@ -802,7 +801,7 @@ if (args.positionals.length > 0) {
       args.values.noRenderImages,
       args.values.width,
     );
-    renderables.forEach((renderable) => box.add(renderable));
+    renderables.forEach((renderable) => contentScrollBox.add(renderable));
   } finally {
     removeSpinner();
   }

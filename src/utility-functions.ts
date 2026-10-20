@@ -1,3 +1,8 @@
+/*
+ * these are utility functions we use in other files. they're useful
+ * and help in readability of the code. the functions have comments
+ * just before their declaration.
+ * */
 import {
   type TextChunk,
   TextAttributes,
@@ -12,6 +17,9 @@ import type { FontName } from "figlet";
 import { type ProcessedToken } from "./stylize";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
 
+/* self-explanatory function. it just aligns text in the terminal. this is used
+ * for the --print-to-stdout option, not the interactive mode.
+ */
 export function alignText(
   text: string,
   align: "left" | "center" | "right",
@@ -38,6 +46,9 @@ export function alignText(
   throw new Error(`Got align string "${align}"`);
 }
 
+/* this function converts opentui TextChunks to ANSI strings to use in
+ * the --print-to-stdout option
+ * */
 export function chunksToAnsi(chunks: TextChunk[]) {
   return chunks
     .map((chunk) => {
@@ -67,6 +78,10 @@ export function chunksToAnsi(chunks: TextChunk[]) {
     .join("");
 }
 
+/*
+ * this function turns a given string into a figlet text, and the font depends
+ * on the heading level, which is from 1-6.
+ * */
 export async function makeFigletFont(
   text: string,
   level: number,
@@ -100,6 +115,12 @@ export async function makeFigletFont(
     .join("\n\n");
 }
 
+/*
+ * this function goes through the children of a list item to check for
+ * lines starting with `[ ]` or `[x]`, and if they are found, the text
+ * is replaced, and a TextChunk is prepended to the token's content
+ * chunks array with the appropiate hex codes and icon.
+ * */
 export function makeTaskList(item: ProcessedToken) {
   if (item.type !== "list_item") throw new Error("");
   const content: ProcessedToken[] = [];
@@ -108,12 +129,11 @@ export function makeTaskList(item: ProcessedToken) {
       case "paragraph":
         child.content.forEach((text) => {
           if (text.type === "text") {
-            const startsWith =
-              text.content.chunks[0]?.text.match(/^\[[ xX]\]\s*/);
+            const chunks = text.content.chunks;
+            const startsWith = chunks[0]?.text.match(/^\[[ xX]\]\s*/);
             if (startsWith?.[0]) {
-              text.content.chunks[0]!.text =
-                text.content.chunks[0]!.text.replace(startsWith[0], " ");
-              text.content.chunks.unshift({
+              chunks[0]!.text = chunks[0]!.text.replace(startsWith[0], " ");
+              chunks.unshift({
                 __isChunk: true,
                 text:
                   startsWith?.[0].trim().toLowerCase() === "[x]"
@@ -154,26 +174,36 @@ const rgbToRGBA = ([r, g, b]: [number, number, number]): [
 
 const colorPalette = createColorPalette();
 
+/*
+ * this function converts ANSI strings into an array of opentui text chunks.
+ * its not too complicated
+ * */
 export function ansiToTextChunks(text: string) {
   const ansiTokens = parseAnsiSequences(text);
   const textChunks = ansiTokens.map((ansiToken): TextChunk => {
+    let fg: RGBA | undefined = undefined;
+    if (ansiToken.foreground) {
+      if ("name" in ansiToken.foreground) {
+        fg = RGBA.fromHex(colorPalette.value(ansiToken.foreground));
+      }
+      if ("rgb" in ansiToken.foreground) {
+        fg = RGBA.fromValues(...rgbToRGBA(ansiToken.foreground.rgb));
+      }
+    }
+    let bg: RGBA | undefined = undefined;
+    if (ansiToken.background) {
+      if ("name" in ansiToken.background) {
+        bg = RGBA.fromHex(colorPalette.value(ansiToken.background));
+      }
+      if ("rgb" in ansiToken.background) {
+        bg = RGBA.fromValues(...rgbToRGBA(ansiToken.background.rgb));
+      }
+    }
     return {
       __isChunk: true,
       text: ansiToken.value,
-      fg: ansiToken.foreground
-        ? "name" in ansiToken.foreground
-          ? RGBA.fromHex(colorPalette.value(ansiToken.foreground))
-          : "rgb" in ansiToken.foreground
-            ? RGBA.fromValues(...rgbToRGBA(ansiToken.foreground.rgb))
-            : undefined
-        : undefined,
-      bg: ansiToken.background
-        ? "name" in ansiToken.background
-          ? RGBA.fromHex(colorPalette.value(ansiToken.background))
-          : "rgb" in ansiToken.background
-            ? RGBA.fromValues(...rgbToRGBA(ansiToken.background.rgb))
-            : undefined
-        : undefined,
+      fg,
+      bg,
       attributes: createTextAttributes({
         bold: ansiToken.decorations.has("bold"),
         italic: ansiToken.decorations.has("italic"),
@@ -186,6 +216,11 @@ export function ansiToTextChunks(text: string) {
   return textChunks;
 }
 
+/*
+ * this function converts ansi strings to an opentui TextRenderable. it
+ * makes use of the earlier ansiToTextChunks function to convert the text
+ * to chunks
+ * */
 export function ansiToTextToken(text: string, ctx: RenderContext, id?: string) {
   if (id) {
     return new TextRenderable(ctx, {

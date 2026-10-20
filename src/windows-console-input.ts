@@ -1,3 +1,9 @@
+/*
+ * NOTE: this whole file is generated entirely by chatgpt. i ain't doing this much
+ * for a system i don't even use. i'm not willing to deal with windows myself.
+ * the comments given should be enough to understand this
+ * */
+
 import { closeSync, createReadStream, openSync } from "node:fs";
 import { dlopen, FFIType } from "bun:ffi";
 
@@ -82,7 +88,7 @@ export function openWindowsConsoleInput() {
 
     throw new Error(
       `SetConsoleMode(CONIN$) failed: Win32 error ${error}. `
-      + "The console may not support virtual-terminal input.",
+        + "The console may not support virtual-terminal input.",
     );
   }
 

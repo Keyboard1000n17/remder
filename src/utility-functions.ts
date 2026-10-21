@@ -128,7 +128,7 @@ export async function makeFigletFont(
           }),
         }),
     );
-    const box = new BoxRenderable(ctx, {});
+    const box = new BoxRenderable(ctx, { flexDirection: "row" });
     textRenderables.forEach((renderable) => box.add(renderable));
     return box;
   } else {

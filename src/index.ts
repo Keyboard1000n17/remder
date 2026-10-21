@@ -726,6 +726,74 @@ keymap.registerLayer({
       },
     },
     //#endregion
+    //#region go full page up
+    {
+      name: "content.goFullPageUp",
+      run() {
+        if (focusedElement === "content") {
+          contentScrollBox.scrollBy(
+            Math.floor(-1 * (parseInt(args.values.height) - 1)),
+          );
+          return;
+        }
+        if ((focusedElement = "menu")) {
+          menu.moveUp((parseInt(args.values.height) - 8) / 2); // we use -8 here to account for the logo at the top of the menu
+          return;
+        }
+      },
+    },
+    //#endregion
+    //#region go full page down
+    {
+      name: "content.goFullPageDown",
+      run() {
+        if (focusedElement === "content") {
+          contentScrollBox.scrollBy(
+            Math.floor(parseInt(args.values.height) - 1),
+          );
+          return;
+        }
+        if ((focusedElement = "menu")) {
+          menu.moveDown((parseInt(args.values.height) - 8) / 2);
+          return;
+        }
+      },
+    },
+    //#endregion
+    //#region go half page up
+    {
+      name: "content.goHalfPageUp",
+      run() {
+        if (focusedElement === "content") {
+          contentScrollBox.scrollBy(
+            Math.floor((-1 * (parseInt(args.values.height) - 1)) / 2),
+          );
+          return;
+        }
+        if ((focusedElement = "menu")) {
+          menu.moveUp((parseInt(args.values.height) - 8) / 4);
+          return;
+        }
+      },
+    },
+    //#endregion
+    //#region go half page down
+    {
+      name: "content.goHalfPageDown",
+      run() {
+        if (focusedElement === "content") {
+          contentScrollBox.scrollBy(
+            Math.floor((parseInt(args.values.height) - 1) / 2),
+          );
+          return;
+        }
+        if ((focusedElement = "menu")) {
+          menu.moveDown((parseInt(args.values.height) - 8) / 4);
+          return;
+        }
+      },
+    },
+    //#endregion
   ],
   bindings: [
     { key: "q", cmd: "app.quit" },
@@ -742,6 +810,10 @@ keymap.registerLayer({
     { key: "shift+t", cmd: "app.toc" },
     { key: "g", cmd: "content.goToTop" },
     { key: "shift+g", cmd: "content.goToBottom" },
+    { key: "d", cmd: "content.goHalfPageDown" },
+    { key: "u", cmd: "content.goHalfPageUp" },
+    { key: "b", cmd: "content.goFullPageUp" },
+    { key: "f", cmd: "content.goFullPageDown" },
     { key: "escape", cmd: "app.goToFileMenu" },
     { key: "/", cmd: "menu.fuzzySearch" },
   ],

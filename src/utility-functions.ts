@@ -11,6 +11,7 @@ import {
   StyledText,
   TextRenderable,
   createTextAttributes,
+  BoxRenderable,
 } from "@opentui/core";
 import chalk from "chalk";
 import type { FontName } from "figlet";
@@ -87,6 +88,20 @@ export async function makeFigletFont(
   level: number,
   align: "left" | "center" | "right",
   termWidth: string,
+  ctx: RenderContext,
+): Promise<BoxRenderable>;
+export async function makeFigletFont(
+  text: string,
+  level: number,
+  align: "left" | "center" | "right",
+  termWidth: string,
+): Promise<string>;
+export async function makeFigletFont(
+  text: string,
+  level: number,
+  align: "left" | "center" | "right",
+  termWidth: string,
+  ctx?: RenderContext,
 ) {
   const figlet = (await import("figlet")).default;
   figlet.defaults({
@@ -104,15 +119,29 @@ export async function makeFigletFont(
     5: "miniwi",
     6: "Calvin S Modified",
   };
-  return figlet
-    .textSync(text.trim(), {
-      font: fontsList[level],
-      width: parseInt(termWidth),
-      whitespaceBreak: true,
-    })
-    .split(/\n\s+\n/)
-    .map((line) => alignText(line, align, termWidth))
-    .join("\n\n");
+  if (ctx) {
+    const textRenderables = text.split("").map(
+      (char) =>
+        new TextRenderable(ctx, {
+          content: figlet.textSync(char, {
+            font: fontsList[level],
+          }),
+        }),
+    );
+    const box = new BoxRenderable(ctx, {});
+    textRenderables.forEach((renderable) => box.add(renderable));
+    return box;
+  } else {
+    return figlet
+      .textSync(text.trim(), {
+        font: fontsList[level],
+        width: parseInt(termWidth),
+        whitespaceBreak: true,
+      })
+      .split(/\n\s+\n/)
+      .map((line) => alignText(line, align, termWidth))
+      .join("\n\n");
+  }
 }
 
 /*

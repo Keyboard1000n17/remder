@@ -72,130 +72,130 @@ if (args.values.help) {
 
 //#region icon map
 const languageToNerdFontIconMap: { [value: string]: string; default: string } =
-  {
-    "angular-html": "\ued4b",
-    "angular-ts": "\ued4b",
-    apache: "\ue72b",
-    apex: "\ue8f5",
-    apl: "\ue730",
-    applescript: "\ue711",
-    asm: "\ue6ab",
-    astro: "\ue6b3",
-    awk: "\ue741",
-    ballerina: "\ue75e",
-    bat: "\uebc4",
-    c: "\ue61e",
-    cairo: "\ue773",
-    clarity: "\ue78d",
-    clojure: "\ue768",
-    cmake: "\ue794",
-    cobol: "\ue900",
-    coffeescript: "\ue751",
-    "common-lisp": "\ue6b0",
-    cpp: "\ue61d",
-    crystal: "\ue7ac",
-    csharp: "\ue7b2",
-    css: "\ue749",
-    csv: "\ueefc",
-    d: "\ue7af",
-    dart: "\ue798",
-    default: "\ueac4",
-    desktop: "\uf108",
-    diff: "\ue702", // git diffs
-    dockerfile: "\ue7b0",
-    dotenv: "\ueba3",
-    elixir: "\ue62d",
-    elm: "\ue7ce",
-    "emacs-lisp": "\ue632",
-    erb: "\uf33a",
-    erlang: "\ue7b1",
-    fennel: "\ue6af",
-    fish: "\uf1af",
-    "git-commit": "\ue702",
-    "git-rebase": "\ue702",
-    gleam: "\ue914",
-    gn: "\ueadd",
-    go: "\ueb93",
-    graphql: "\ue8f6",
-    groovy: "\ue775",
-    hack: "\uf1d4",
-    handlebars: "\ue7f7",
-    haskell: "\ue777",
-    haxe: "\ue7fa",
-    html: "\ue736",
-    hy: "\uebb9",
-    ini: "\ueaba",
-    java: "\ue738",
-    javascript: "\ue781",
-    jinja: "\ue66f",
-    json: "\ueb0f",
-    jsx: "\ue61b",
-    julia: "\ue80d",
-    just: "\uebf0",
-    kotlin: "\ue634",
-    latex: "\ue81f",
-    less: "\ue758",
-    liquid: "\uf1826",
-    logo: "\uf0343",
-    lua: "\ue826",
-    makefile: "\ue673",
-    markdown: "\ueb1d",
-    matlab: "\ue82a",
-    move: "\ueadf",
-    nginx: "\ue776",
-    nim: "\ueaba",
-    nix: "\ue843",
-    ocaml: "\ue84e",
-    openscad: "\uf34e",
-    perl: "\ue769",
-    php: "\ue77a",
-    polar: "\uf041e",
-    postcss: "\ue86a",
-    powershell: "\uebc7",
-    prisma: "\ue86e",
-    prolog: "\ue7a1",
-    pug: "\ue938",
-    puppet: "\ue631",
-    purescript: "\ue630",
-    python: "\uec39",
-    r: "\uea97",
-    racket: "\uebe5",
-    rel: "\ueb58",
-    ron: "\ueab4",
-    ruby: "\ueb48",
-    rust: "\ue68b",
-    sas: "\ue74b",
-    sass: "\ue74b",
-    scala: "\ue737",
-    scheme: "\ue6b1",
-    shell: "\uebc7",
-    solidity: "\ue8a6",
-    sql: "\ue75b",
-    stata: "\ue8b2",
-    stylus: "\ue759",
-    svelte: "\ue8b7",
-    swift: "\ue755",
-    templ: "\uebbf",
-    terraform: "\ue8bd",
-    tex: "\uec5e",
-    toml: "\ue6b2",
-    turtle: "\uf0cd7",
-    twig: "\ue61c",
-    "ts-tags": "\ue8ca",
-    typescript: "\ue8ca",
-    typst: "\uf37f",
-    v: "\uea97",
-    vala: "\ue8d1",
-    vim: "\ue6ae",
-    vue: "\ue8dc",
-    "vue-html": "\ue8dc",
-    "vue-vine": "\ue8dc",
-    vyper: "\ue8df",
-    wolfram: "\ue956",
-    xml: "\ue8ea",
-    yaml: "\ue8eb",
-    zig: "\ue8ef",
-  };
+{
+  "angular-html": "\ued4b",
+  "angular-ts": "\ued4b",
+  apache: "\ue72b",
+  apex: "\ue8f5",
+  apl: "\ue730",
+  applescript: "\ue711",
+  asm: "\ue6ab",
+  astro: "\ue6b3",
+  awk: "\ue741",
+  ballerina: "\ue75e",
+  bat: "\uebc4",
+  c: "\ue61e",
+  cairo: "\ue773",
+  clarity: "\ue78d",
+  clojure: "\ue768",
+  cmake: "\ue794",
+  cobol: "\ue900",
+  coffeescript: "\ue751",
+  "common-lisp": "\ue6b0",
+  cpp: "\ue61d",
+  crystal: "\ue7ac",
+  csharp: "\ue7b2",
+  css: "\ue749",
+  csv: "\ueefc",
+  d: "\ue7af",
+  dart: "\ue798",
+  default: "\ueac4",
+  desktop: "\uf108",
+  diff: "\ue702", // git diffs
+  dockerfile: "\ue7b0",
+  dotenv: "\ueba3",
+  elixir: "\ue62d",
+  elm: "\ue7ce",
+  "emacs-lisp": "\ue632",
+  erb: "\uf33a",
+  erlang: "\ue7b1",
+  fennel: "\ue6af",
+  fish: "\uf1af",
+  "git-commit": "\ue702",
+  "git-rebase": "\ue702",
+  gleam: "\ue914",
+  gn: "\ueadd",
+  go: "\ueb93",
+  graphql: "\ue8f6",
+  groovy: "\ue775",
+  hack: "\uf1d4",
+  handlebars: "\ue7f7",
+  haskell: "\ue777",
+  haxe: "\ue7fa",
+  html: "\ue736",
+  hy: "\uebb9",
+  ini: "\ueaba",
+  java: "\ue738",
+  javascript: "\ue781",
+  jinja: "\ue66f",
+  json: "\ueb0f",
+  jsx: "\ue61b",
+  julia: "\ue80d",
+  just: "\uebf0",
+  kotlin: "\ue634",
+  latex: "\ue81f",
+  less: "\ue758",
+  liquid: "\uf1826",
+  logo: "\uf0343",
+  lua: "\ue826",
+  makefile: "\ue673",
+  markdown: "\ueb1d",
+  matlab: "\ue82a",
+  move: "\ueadf",
+  nginx: "\ue776",
+  nim: "\ueaba",
+  nix: "\ue843",
+  ocaml: "\ue84e",
+  openscad: "\uf34e",
+  perl: "\ue769",
+  php: "\ue77a",
+  polar: "\uf041e",
+  postcss: "\ue86a",
+  powershell: "\uebc7",
+  prisma: "\ue86e",
+  prolog: "\ue7a1",
+  pug: "\ue938",
+  puppet: "\ue631",
+  purescript: "\ue630",
+  python: "\uec39",
+  r: "\uea97",
+  racket: "\uebe5",
+  rel: "\ueb58",
+  ron: "\ueab4",
+  ruby: "\ueb48",
+  rust: "\ue68b",
+  sas: "\ue74b",
+  sass: "\ue74b",
+  scala: "\ue737",
+  scheme: "\ue6b1",
+  shell: "\uebc7",
+  solidity: "\ue8a6",
+  sql: "\ue75b",
+  stata: "\ue8b2",
+  stylus: "\ue759",
+  svelte: "\ue8b7",
+  swift: "\ue755",
+  templ: "\uebbf",
+  terraform: "\ue8bd",
+  tex: "\uec5e",
+  toml: "\ue6b2",
+  turtle: "\uf0cd7",
+  twig: "\ue61c",
+  "ts-tags": "\ue8ca",
+  typescript: "\ue8ca",
+  typst: "\uf37f",
+  v: "\uea97",
+  vala: "\ue8d1",
+  vim: "\ue6ae",
+  vue: "\ue8dc",
+  "vue-html": "\ue8dc",
+  "vue-vine": "\ue8dc",
+  vyper: "\ue8df",
+  wolfram: "\ue956",
+  xml: "\ue8ea",
+  yaml: "\ue8eb",
+  zig: "\ue8ef",
+};
 //#endregion
 
 //#region --print-to-stdout option
@@ -282,21 +282,21 @@ let detailsElementsIndex: number | null = null;
 
 //#region handle stdin
 /*
-   NOTE: chatgpt generated this part of the code, i can not be bothered to deal
-  with a bug in bun that has a pr waiting since june 12 2026
-  (oven-sh/bun#32153) (https://github.com/oven-sh/bun/pull/32153).
- 
-  what this code does is it checks if stdin is a tty. if stdin is a tty at the
-  time of checking, the opentui renderer takes the normal stdin as input. but if
-  it isn't a tty, that means that some input is being piped into the program. in
-  that case, two things can happen:
-  1. if the os is windows, then we import the ffi module to open a new input stream
-     that bun will consider a tty
-  2. if the os is not windows, we assume it is a sort of unix implementation and open
-     an input stream on /dev/tty/
-  
-  the rest of the comments in this block are from chatgpt
-*/
+ *  NOTE: chatgpt generated this part of the code, i can not be bothered to deal
+ * with a bug in bun that has a pr waiting since june 12 2026
+ * (oven-sh/bun#32153) (https://github.com/oven-sh/bun/pull/32153).
+ *
+ * what this code does is it checks if stdin is a tty. if stdin is a tty at the
+ * time of checking, the opentui renderer takes the normal stdin as input. but if
+ * it isn't a tty, that means that some input is being piped into the program. in
+ * that case, two things can happen:
+ * 1. if the os is windows, then we import the ffi module to open a new input stream
+ *    that bun will consider a tty
+ * 2. if the os is not windows, we assume it is a sort of unix implementation and open
+ *    an input stream on /dev/tty/
+ *
+ * the rest of the comments in this block are from chatgpt
+ * */
 
 const stdinWasTTY = process.stdin.isTTY;
 const { ReadStream } = await import("node:tty");
@@ -387,9 +387,7 @@ const noFilesFoundText = new TextRenderable(renderer, {
   width: "100%",
 });
 homeRenderable.add(
-  new TextRenderable(renderer, {
-    content: await makeFigletFont("remder", 1, "left", args.values.width),
-  }),
+  await makeFigletFont("remder", 1, "left", args.values.width, renderer),
 );
 homeRenderable.add(noFilesFoundText);
 root.add(homeRenderable);
@@ -552,9 +550,9 @@ keymap.registerLayer({
       run() {
         focusedElement === "content"
           ? (
-              root.findDescendantById(`root-scrollbox`) as
-                ScrollBoxRenderable | undefined
-            )?.scrollBy(1)
+            root.findDescendantById(`root-scrollbox`) as
+            ScrollBoxRenderable | undefined
+          )?.scrollBy(1)
           : menu?.moveDown();
       },
     },
@@ -565,9 +563,9 @@ keymap.registerLayer({
       run() {
         focusedElement === "content"
           ? (
-              root.findDescendantById(`root-scrollbox`) as
-                ScrollBoxRenderable | undefined
-            )?.scrollBy(-1)
+            root.findDescendantById(`root-scrollbox`) as
+            ScrollBoxRenderable | undefined
+          )?.scrollBy(-1)
           : menu?.moveUp();
       },
     },

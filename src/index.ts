@@ -1,4 +1,5 @@
 const initTime = performance.now();
+
 //#region args
 import { parseArgs } from "node:util";
 
@@ -251,7 +252,6 @@ import {
   StyledText,
   type BoxOptions,
   BoxRenderable,
-  type TextOptions,
   ScrollBoxRenderable,
   SelectRenderable,
   TextRenderable,
@@ -888,7 +888,7 @@ const bottomBarOpts: BoxOptions<BoxRenderable> = {
   position: "absolute",
   bottom: 0,
   left: 0,
-  backgroundColor: RGBA.fromInts(40, 40, 40),
+  backgroundColor: "#282828",
   id: "bottomBar",
 };
 const bottomBar = new BoxRenderable(renderer, bottomBarOpts);
@@ -925,52 +925,122 @@ root.add(bottomBar);
 //#endregion
 
 //#region help menu
-const helpMenuChildrenOpts: TextOptions = {
-  width: "auto",
-  height: 1,
-};
-// prettier-ignore
-const helpMenuChildren = [
-  Text({ content: "q        quit", ...helpMenuChildrenOpts }),
-  Text({ content: "j/down   go down", ...helpMenuChildrenOpts }),
-  Text({ content: "k/up     go up", ...helpMenuChildrenOpts }),
-  Text({ content: "J        jump to next heading", ...helpMenuChildrenOpts }),
-  Text({ content: "K        jump to previous heading", ...helpMenuChildrenOpts }),
-  Text({ content: "T        toggle table of contents", ...helpMenuChildrenOpts }),
-  Text({ content: "?        help menu", ...helpMenuChildrenOpts }),
-  Text({ content: "g        go to top", ...helpMenuChildrenOpts }),
-  Text({ content: "G        go to bottom", ...helpMenuChildrenOpts }),
-  Text({ content: "[d       go to previous details element", ...helpMenuChildrenOpts, }),
-  Text({ content: "]d       go to next details element", ...helpMenuChildrenOpts }),
+const helpSections = [
+  {
+    title: "Global",
+    shortcuts: [
+      { key: "q", description: "Quit remder" },
+      { key: "?", description: "Toggle help menu" },
+      ...(args.values.debug
+        ? [{ key: "C", description: "Toggle debug console" }]
+        : []),
+    ],
+  },
+  {
+    title: "File menu",
+    shortcuts: [
+      { key: "↑ / ↓", description: "Move through files" },
+      { key: "j / k", description: "Move through files" },
+      { key: "Enter", description: "Open selected file" },
+      { key: "/", description: "Search files" },
+    ],
+  },
+  {
+    title: "Reading",
+    shortcuts: [
+      { key: "↑ / ↓", description: "Scroll document" },
+      { key: "j / k", description: "Scroll document" },
+      { key: "g", description: "Jump to top" },
+      { key: "Shift+G", description: "Jump to bottom" },
+      { key: "Shift+K", description: "Previous heading" },
+      { key: "Shift+J", description: "Next heading" },
+      { key: "[d", description: "Previous details element" },
+      { key: "]d", description: "Next details element" },
+      { key: "Shift+T", description: "Toggle table of contents" },
+      { key: "Esc", description: "Return to file menu" },
+    ],
+  },
 ];
-if (args.values.debug) {
-  helpMenuChildren.push(
-    Text({ content: "C      - toggle console", ...helpMenuChildrenOpts }),
-  );
-}
-const helpMenuOpts: BoxOptions<BoxRenderable> = {
-  flexDirection: "column",
+
+const helpMenuBox = new BoxRenderable(renderer, {
   position: "absolute",
-  gap: 1,
-  padding: 1,
+  width: 50,
+  flexDirection: "column",
+  gap: 2,
+  padding: 2,
   border: true,
   title: "Help",
   titleAlignment: "center",
   titleColor: "white",
-  backgroundColor: RGBA.fromInts(40, 40, 40),
-  borderColor: RGBA.fromInts(40, 40, 40),
+  backgroundColor: RGBA.fromHex("#282828"),
+  borderColor: RGBA.fromHex("#444444"),
   id: "helpMenu",
   visible: false,
   zIndex: 5,
   onSizeChange() {
-    helpMenuBox.top = Math.floor((root.height - helpMenuBox.height) / 2);
-    helpMenuBox.left = Math.floor((root.width - helpMenuBox.width) / 2);
+    helpMenuBox.top = Math.max(
+      0,
+      Math.floor((root.height - helpMenuBox.height) / 2),
+    );
+    helpMenuBox.left = Math.max(
+      0,
+      Math.floor((root.width - helpMenuBox.width) / 2),
+    );
   },
-};
-const helpMenuBox = new BoxRenderable(renderer, helpMenuOpts);
-helpMenuChildren.forEach((child) => helpMenuBox.add(child));
-console.log(root.height, helpMenuBox.height, root.width, helpMenuBox.width);
+});
+
+for (const section of helpSections) {
+  const sectionBox = new BoxRenderable(renderer, {
+    width: "100%",
+    flexDirection: "column",
+    gap: 0,
+  });
+  sectionBox.add(
+    Text({
+      content: section.title,
+      height: 1,
+      fg: RGBA.fromHex("#089916"),
+      attributes: createTextAttributes({ bold: true }),
+    }),
+  );
+  for (const shortcut of section.shortcuts) {
+    const row = new BoxRenderable(renderer, {
+      width: "100%",
+      flexDirection: "row",
+      gap: 1,
+    });
+    row.add(
+      Text({
+        content: shortcut.key,
+        width: 12,
+        height: 1,
+        fg: RGBA.fromHex("#ffffff"),
+      }),
+    );
+    row.add(
+      Text({
+        content: shortcut.description,
+        flexGrow: 1,
+        height: 1,
+        fg: RGBA.fromHex("#d0d0d0"),
+      }),
+    );
+    sectionBox.add(row);
+  }
+  helpMenuBox.add(sectionBox);
+}
+
 root.add(helpMenuBox);
+
+// Center initially and whenever the layout changes
+helpMenuBox.top = Math.max(
+  0,
+  Math.floor((root.height - helpMenuBox.height) / 2),
+);
+helpMenuBox.left = Math.max(
+  0,
+  Math.floor((root.width - helpMenuBox.width) / 2),
+);
 //#endregion
 
 //#region table of contents

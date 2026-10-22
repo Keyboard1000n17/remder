@@ -432,6 +432,14 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   contentScrollBox.focus();
   root.add(contentScrollBox);
   focusedElement = "content";
+  pathIndicator.content = new StyledText([
+    {
+      __isChunk: true,
+      text: opt.value,
+      attributes: createTextAttributes({ dim: true }),
+    },
+  ]);
+  console.log("trying " + opt.value);
   try {
     const content = await Bun.file(opt.value).text();
     const rendered = await stylize(parseInput(content), opt.value);
@@ -713,6 +721,7 @@ keymap.registerLayer({
         focusedElement = "menu";
         searchRow.visible = false;
         bottomBar.visible = true; // just in case search is open
+        pathIndicator.content = new StyledText([{ __isChunk: true, text: "" }]);
       },
     },
     //#endregion
@@ -906,13 +915,12 @@ bottomBar.add(
     }),
   ),
 );
-bottomBar.add(
-  Text({
-    content: args.positionals.at(-1) || "stdin",
-    attributes: createTextAttributes({ dim: true }),
-    marginLeft: 1,
-  }),
-);
+const pathIndicator = new TextRenderable(renderer, {
+  content: args.positionals.at(-1) || "",
+  attributes: createTextAttributes({ dim: true }),
+  marginLeft: 1,
+});
+bottomBar.add(pathIndicator);
 bottomBar.add(
   Text({
     content: "? - Help",

@@ -38,6 +38,6 @@
     "table": "^6.9.0",
     "terminal-image": "^5.0.1",
     "terminal-link": "^5.0.0",
-    "tslog": "^5.2.0"
+    "tslog": "^5.4.0"
   }
 }

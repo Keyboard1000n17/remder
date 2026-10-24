@@ -219,9 +219,9 @@ export default class Image {
       id: `${this.id}__image`,
       padding: 0,
       margin: 0,
+      width: Math.ceil(width / cellWidth),
+      height: Math.ceil(height / rowHeight),
       onLoad: async () => {
-        imageRenderable.width = width / cellWidth;
-        imageRenderable.height = height / rowHeight;
         logger.info(
           `image height: px - ${height} colums - ${height / rowHeight}`,
         );

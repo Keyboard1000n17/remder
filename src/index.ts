@@ -360,11 +360,6 @@ function loadSpinner(parent: ScrollBoxRenderable) {
   };
 }
 
-const loadingText = new TextRenderable(renderer, {
-  content: `${spinnerFrames[0]} Loading...`,
-  width: "100%",
-});
-
 flushLogBuffer();
 
 const root = new BoxRenderable(renderer, {
@@ -439,7 +434,6 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
       attributes: createTextAttributes({ dim: true }),
     },
   ]);
-  console.log("trying " + opt.value);
   try {
     const content = await Bun.file(opt.value).text();
     const rendered = await stylize(parseInput(content), opt.value);

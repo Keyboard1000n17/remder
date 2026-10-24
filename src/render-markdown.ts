@@ -288,10 +288,17 @@ export async function renderMarkdown(
           }
           const headingId = `heading-${headingIndexes.slice(0, level).join("-")}`;
           const heading = new TextRenderable(ctx, {
+            id: headingId,
             content: str,
             alignSelf: token.properties.align ?? "left",
           });
           componentArray.push(heading);
+          console.log({
+            headingText: heading.content.chunks
+              .map((chunk) => chunk.text)
+              .join(),
+            headingHeight: heading.height,
+          });
           if (tokenContent.links.chunks.length > 0) {
             componentArray.push(
               new TextRenderable(ctx, {
@@ -322,14 +329,13 @@ export async function renderMarkdown(
           alignSelf: token.properties.align ?? "left",
         });
         heading.add(
-          new TextRenderable(ctx, {
-            content: await makeFigletFont(
-              tokenContent.text,
-              tokenContent.level,
-              "left",
-              width,
-            ),
-          }),
+          await makeFigletFont(
+            tokenContent.text,
+            tokenContent.level,
+            "left",
+            width,
+            ctx,
+          ),
         );
         componentArray.push(heading);
         if (tokenContent.links.chunks.length > 0) {

@@ -123,12 +123,18 @@ export async function makeFigletFont(
     const textRenderables = text.split("").map(
       (char) =>
         new TextRenderable(ctx, {
-          content: figlet.textSync(char, {
-            font: fontsList[level],
-          }),
+          content: figlet
+            .textSync(char, {
+              font: fontsList[level],
+            })
+            .trim(),
         }),
     );
-    const box = new BoxRenderable(ctx, { flexDirection: "row" });
+    const box = new BoxRenderable(ctx, {
+      flexDirection: "row",
+      margin: 0,
+      padding: 0,
+    });
     textRenderables.forEach((renderable) => box.add(renderable));
     return box;
   } else {
@@ -140,7 +146,8 @@ export async function makeFigletFont(
       })
       .split(/\n\s+\n/)
       .map((line) => alignText(line, align, termWidth))
-      .join("\n\n");
+      .join("\n\n")
+      .trim();
   }
 }
 

@@ -360,11 +360,6 @@ function loadSpinner(parent: ScrollBoxRenderable) {
   };
 }
 
-const loadingText = new TextRenderable(renderer, {
-  content: `${spinnerFrames[0]} Loading...`,
-  width: "100%",
-});
-
 flushLogBuffer();
 
 const root = new BoxRenderable(renderer, {
@@ -439,7 +434,6 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
       attributes: createTextAttributes({ dim: true }),
     },
   ]);
-  console.log("trying " + opt.value);
   try {
     const content = await Bun.file(opt.value).text();
     const rendered = await stylize(parseInput(content), opt.value);
@@ -464,7 +458,21 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
         };
       });
       root.add(tocBox);
-      contentScrollBox.remove(loadingText);
+      renderer.once("frame", () => {
+        const children = contentScrollBox.getChildren();
+        console.log(
+          children.map((renderable, index) => ({
+            index,
+            id: renderable.id,
+            type: renderable.constructor.name,
+            height: renderable.height,
+            content:
+              renderable instanceof TextRenderable
+                ? String(renderable.content)
+                : undefined,
+          })),
+        );
+      });
     }
     focusedElement = "content";
     homeRenderable.visible = false;
@@ -858,6 +866,18 @@ if (args.positionals.length > 0) {
   });
   contentScrollBox.focus();
   focusedElement = "content";
+  console.log(
+    renderables.map((renderable, index) => ({
+      index,
+      id: renderable.id,
+      type: renderable.constructor.name,
+      height: renderable.height,
+      content:
+        renderable instanceof TextRenderable
+          ? String(renderable.content)
+          : undefined,
+    })),
+  );
   removeSpinner();
   //#endregion
 } else if (!stdinWasTTY) {

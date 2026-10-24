@@ -248,7 +248,7 @@ export default async function tokensToString(
           + chalk.hex(alertIconAndColor!.color)(
             ` ${alertIconAndColor!.icon} ${alertIconAndColor!.name}`,
           )
-          + "\n"
+          + `\n${uhb}\n`
           + renderedAlertChildren
             .split("\n")
             .map((line) => `${uhb} ${line}`)
@@ -259,22 +259,19 @@ export default async function tokensToString(
       //#endregion
       //#region code block
       case "codeBlock":
-        const codeTokenContent = token.content as {
-          code: string;
-          language: string;
-        };
+        const codeTokenContent = token.content;
         const language = codeTokenContent.language;
         const icon =
           languageToNerdFontIconMap[language]
           ?? languageToNerdFontIconMap.default;
-        const languageLine = ` ${icon} ${language} `;
+        const languageLine = `  ${icon} ${language} `;
         const boxWidth = Math.min(
           Math.max(
             ...codeTokenContent.code
               .split("\n")
               .map((line) => Bun.stringWidth(line)),
             Bun.stringWidth(languageLine),
-          ) + 2,
+          ) + 4,
           parseInt(termWidth) - 2,
         );
         const emptyLine = " ".repeat(boxWidth);
@@ -283,9 +280,9 @@ export default async function tokensToString(
           .split("\n")
           .map(
             (line) =>
-              " "
+              "  "
               + line
-              + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 1),
+              + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 2),
           )
           .join("\n");
         contentStrings.push(

@@ -16,6 +16,19 @@ type BufferedLog = {
   level: "log" | "error";
   line: string;
 };
+
+const argv = process.argv.slice(1);
+const separator = argv.indexOf("--");
+const options = separator === -1 ? argv : argv.slice(0, separator);
+
+const printToStdout = options.some(
+  (arg) =>
+    arg === "--print-to-stdout"
+    || (arg.startsWith("-")
+      && !arg.startsWith("--")
+      && arg.slice(1).includes("o")),
+);
+
 const logbuf: BufferedLog[] = [];
 let writeLog: ((entry: BufferedLog) => void) | undefined;
 const logger = new Logger({ type: "hidden" });
@@ -27,7 +40,6 @@ logger.attachTransport({
       level: (record._logMeta?.logLevelId || 5) >= 5 ? "error" : "log",
       line,
     };
-
     if (writeLog) {
       writeLog(entry);
     } else {
@@ -275,10 +287,15 @@ export default class Image {
   }
 }
 
-writeLog = ({ level, line }) => {
-  (level === "error" ? console.error : console.log)(line);
-};
+if (printToStdout) {
+  logbuf.length = 0;
+  writeLog = () => { };
+} else {
+  writeLog = ({ level, line }) => {
+    (level === "error" ? console.error : console.log)(line);
+  };
 
-for (const entry of logbuf.splice(0)) {
-  writeLog(entry);
+  for (const entry of logbuf.splice(0)) {
+    writeLog(entry);
+  }
 }

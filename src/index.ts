@@ -242,7 +242,7 @@ if (args.values.printToStdout) {
 //#endregion
 
 //#region imports
-import { flushLogBuffer } from "./stylize.js";
+import { flushLogBuffer } from "./stylize";
 import {
   createCliRenderer,
   Box,
@@ -384,6 +384,7 @@ const noFilesFoundText = new TextRenderable(renderer, {
 homeRenderable.add(
   await makeFigletFont("remder", 1, "left", args.values.width, renderer),
 );
+homeRenderable.add(new BoxRenderable(renderer, { height: 1 }));
 homeRenderable.add(noFilesFoundText);
 root.add(homeRenderable);
 
@@ -458,7 +459,6 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
         };
       });
       root.add(tocBox);
-      contentScrollBox.remove(loadingText);
     }
     focusedElement = "content";
     homeRenderable.visible = false;
@@ -904,7 +904,7 @@ bottomBar.add(
       columnGap: 1,
     },
     Text({
-      content: "reMDer",
+      content: "remder",
       attributes: createTextAttributes({ bold: true }),
     }),
   ),

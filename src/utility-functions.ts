@@ -32,17 +32,18 @@ export function alignText(
   } else if (align === "right") {
     return text
       .split("\n")
-      .map((line) =>
-        line.padStart(Math.max(0, Bun.stringWidth(line) - width), " "),
-      )
+      .map((line) => line.padStart(Math.max(0, width), " "))
       .join("\n");
   } else if (align === "center") {
     return text
       .split("\n")
       .map((line) =>
-        line.padStart(Math.max(0, (width - Bun.stringWidth(line)) / 2)),
+        line.padStart(
+          Math.max(0, Math.floor((width - Bun.stringWidth(line)) / 2))
+          + Bun.stringWidth(line),
+        ),
       )
-      .join("");
+      .join("\n");
   }
   throw new Error(`Got align string "${align}"`);
 }
@@ -127,11 +128,14 @@ export async function makeFigletFont(
             .textSync(char, {
               font: fontsList[level],
             })
-            .trim(),
+            .trimEnd()
+            .replace(/^[^\S\r\n]*\r?\n/, ""),
         }),
     );
     const box = new BoxRenderable(ctx, {
       flexDirection: "row",
+      flexWrap: "wrap",
+      rowGap: 1,
       margin: 0,
       padding: 0,
     });
@@ -144,10 +148,9 @@ export async function makeFigletFont(
         width: parseInt(termWidth),
         whitespaceBreak: true,
       })
-      .split(/\n\s+\n/)
+      .split(/\r?\n\r?\n/)
       .map((line) => alignText(line, align, termWidth))
-      .join("\n\n")
-      .trim();
+      .join("\n\n");
   }
 }
 

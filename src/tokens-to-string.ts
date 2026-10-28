@@ -1,10 +1,6 @@
 import { type HeadingObject, type ProcessedToken } from "./stylize";
-import {
-  chunksToAnsi,
-  makeTaskList,
-  alignText,
-  makeFigletFont,
-} from "./utility-functions";
+import { chunksToAnsi, makeTaskList, alignText, makeFigletFont } from "./utility-functions";
+import type Image from "./image-class";
 
 export default async function tokensToString(
   tokens: ProcessedToken[],
@@ -12,16 +8,72 @@ export default async function tokensToString(
   noRenderHeadings: boolean,
   languageToNerdFontIconMap: { default: string;[value: string]: string },
   indent = 0,
+  parentAlignment: "left" | "center" | "right" = "left",
 ): Promise<string> {
   const contentStrings: string[] = [];
   const chalk = (await import("chalk")).default;
-  const terminalImage =
-    tokens.some(
-      (t) =>
-        t.type === "paragraph" && t.content.some((u) => u.type === "image"),
-    ) && (await import("terminal-image")).default;
-  const table =
-    tokens.some((t) => t.type === "table") && (await import("table")).table;
+  const areThereImageTokens = tokens.some(
+    (t) =>
+      t.type === "image" || (t.type === "paragraph" && t.content.some((u) => u.type === "image")),
+  );
+  const terminalImage = areThereImageTokens && (await import("terminal-image")).default;
+  const terminalGraphicsSupport = areThereImageTokens
+    ? (await import("supports-terminal-graphics")).default.stdout
+    : undefined;
+  const supportsTerminalGraphics = Boolean(
+    terminalGraphicsSupport
+    && !/^tmux|^screen/.test(process.env.TERM || "")
+    && (terminalGraphicsSupport.kitty
+      || terminalGraphicsSupport.iterm2
+      || terminalGraphicsSupport.sixel),
+  );
+  const table = tokens.some((t) => t.type === "table") && (await import("table")).table;
+  const renderImage = async (image: Image, alignment: string, inline: boolean): Promise<string> => {
+    if (!terminalImage) return chalk.gray(image.imageAlt);
+    const initBuf = await image.imageBuffer;
+    if (!initBuf) return chalk.gray(image.imageAlt);
+    const imageDimensions = await image.getImageSize(initBuf, parseInt(termWidth), inline);
+    let buf: Buffer;
+    if (imageDimensions.imageType === "svg") {
+      const Resvg = (await import("@resvg/resvg-js")).Resvg;
+      buf = new Resvg(Buffer.from(initBuf), {
+        fitTo: {
+          mode: imageDimensions.shouldUseWidth ? "width" : "height",
+          value: imageDimensions.shouldUseWidth ? imageDimensions.width : imageDimensions.height,
+        },
+      })
+        .render()
+        .asPng();
+    } else if (imageDimensions.imageType === "webp") {
+      buf = await new Bun.Image(initBuf).png().toBuffer();
+    } else {
+      buf = Buffer.from(initBuf);
+    }
+    const imageWidthInCells = Math.ceil(imageDimensions.width / imageDimensions.cellWidth);
+    const normalizedAlignment =
+      alignment === "left" || alignment === "center" || alignment === "right" ? alignment : "left";
+    const padding =
+      normalizedAlignment === "center"
+        ? Math.floor((parseInt(termWidth) - imageWidthInCells) / 2)
+        : normalizedAlignment === "right"
+          ? Math.floor(parseInt(termWidth) - imageWidthInCells)
+          : 0;
+    const renderedImg = await terminalImage.buffer(buf, {
+      width: imageWidthInCells,
+      height: Math.ceil(imageDimensions.height / imageDimensions.rowHeight),
+      preferNativeRender: supportsTerminalGraphics ? true : false,
+    });
+    if (supportsTerminalGraphics) {
+      // native images can be padded with spaces on just one line
+      return " ".repeat(padding) + renderedImg;
+    } else {
+      // ansi block images need to be padded by prepending spaces on all lines
+      return renderedImg
+        .split("\n")
+        .map((line) => " ".repeat(padding) + line)
+        .join("\n");
+    }
+  };
   for (const token of tokens) {
     //#region switch token type
     switch (token.type) {
@@ -35,37 +87,26 @@ export default async function tokensToString(
       case "paragraph": {
         const content = token.content;
         const paragraphItems: string[] = [];
+        const paragraphAlignment: string = token.properties.align ?? parentAlignment;
         for (const element of content) {
           if (element.type === "image") {
-            const image = element.content;
-            if (terminalImage) {
-              const initBuf = await image.imageBuffer;
-              let buf;
-              if (!initBuf) {
-                paragraphItems.push(chalk.gray(image.imageAlt));
-                continue;
-              }
-              if (image.path.endsWith(".svg")) {
-                const Resvg = (await import("@resvg/resvg-js")).Resvg;
-                buf = new Resvg(Buffer.from(initBuf)).render().asPng();
-              } else if (image.path.endsWith(".webp")) {
-                buf = await new Bun.Image(initBuf).png().bytes();
-              }
-              if (!buf) continue;
-              paragraphItems.push(
-                await terminalImage.buffer(buf, {
-                  preferNativeRender: !/^xterm$|^tmux|^screen/.test(
-                    process.env.TERM || "",
-                  ),
-                }),
-              );
-            }
+            paragraphItems.push(
+              await renderImage(element.content, paragraphAlignment, content.length > 1),
+            );
           } else if (element.type === "text") {
             const text = chunksToAnsi(element.content.chunks);
             paragraphItems.push(text);
           }
         }
         contentStrings.push(...paragraphItems);
+        break;
+      }
+      //#endregion
+      //#region standalone image
+      case "image": {
+        contentStrings.push(
+          await renderImage(token.content, token.properties.align ?? parentAlignment, false),
+        );
         break;
       }
       //#endregion
@@ -84,11 +125,7 @@ export default async function tokensToString(
           const str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
           );
-          const heading = alignText(
-            str,
-            token.properties.align ?? "left",
-            termWidth,
-          );
+          const heading = alignText(str, token.properties.align ?? "left", termWidth);
           contentStrings.push(heading);
           if (tokenContent.links.chunks.length > 0) {
             contentStrings.push(chunksToAnsi(tokenContent.links.chunks));
@@ -110,6 +147,12 @@ export default async function tokensToString(
       //#region table
       case "table":
         if (!table) break;
+        const columnCount = Math.max(...token.content.map((row) => row.length));
+        // Column width excludes the table package's two spaces of cell padding.
+        const tableColumnWidth = Math.max(
+          1,
+          Math.floor((Number(termWidth) - 3 * columnCount - 1) / columnCount),
+        );
         const cells = await Promise.all(
           token.content.map(
             async (row) =>
@@ -118,15 +161,24 @@ export default async function tokensToString(
                   async (cell) =>
                     await tokensToString(
                       cell.content,
-                      termWidth,
+                      String(tableColumnWidth),
                       noRenderHeadings,
                       languageToNerdFontIconMap,
+                      0,
+                      cell.properties.textAlign === "flex-start"
+                        ? "left"
+                        : cell.properties.textAlign === "flex-end"
+                          ? "right"
+                          : "center",
                     ),
                 ),
               ),
           ),
         );
         const renderedTable = table(cells, {
+          columns: Array.from({ length: columnCount }, () => ({
+            width: tableColumnWidth,
+          })),
           border: {
             topLeft: "╭",
             topRight: "╮",
@@ -160,6 +212,7 @@ export default async function tokensToString(
             noRenderHeadings,
             languageToNerdFontIconMap,
             indent + 2,
+            parentAlignment,
           );
           bulletListItems.push(
             renderedListContent
@@ -188,6 +241,7 @@ export default async function tokensToString(
             noRenderHeadings,
             languageToNerdFontIconMap,
             indent + 2,
+            parentAlignment,
           );
           orderedListItems.push(
             renderedListContent
@@ -213,6 +267,7 @@ export default async function tokensToString(
           noRenderHeadings,
           languageToNerdFontIconMap,
           indent + 2,
+          parentAlignment,
         );
         blockquoteItems.push(
           renderedBlockquoteChildren
@@ -224,10 +279,7 @@ export default async function tokensToString(
       //#endregion
       //#region alerts
       case "alert": {
-        const alertIcons: Record<
-          string,
-          { icon: string; color: string; name: string }
-        > = {
+        const alertIcons: Record<string, { icon: string; color: string; name: string }> = {
           note: { icon: "\uf129", color: "#6af", name: "Note" },
           tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
           important: { icon: "\uf12a", color: "#96f", name: "Important" },
@@ -241,6 +293,8 @@ export default async function tokensToString(
           termWidth,
           noRenderHeadings,
           languageToNerdFontIconMap,
+          indent,
+          parentAlignment,
         );
         const uhb = chalk.hex(alertIconAndColor!.color)("\u258c"); // unicode left half block
         contentStrings.push(
@@ -261,15 +315,11 @@ export default async function tokensToString(
       case "codeBlock":
         const codeTokenContent = token.content;
         const language = codeTokenContent.language;
-        const icon =
-          languageToNerdFontIconMap[language]
-          ?? languageToNerdFontIconMap.default;
+        const icon = languageToNerdFontIconMap[language] ?? languageToNerdFontIconMap.default;
         const languageLine = `  ${icon} ${language} `;
         const boxWidth = Math.min(
           Math.max(
-            ...codeTokenContent.code
-              .split("\n")
-              .map((line) => Bun.stringWidth(line)),
+            ...codeTokenContent.code.split("\n").map((line) => Bun.stringWidth(line)),
             Bun.stringWidth(languageLine),
           ) + 4,
           parseInt(termWidth) - 2,
@@ -279,10 +329,7 @@ export default async function tokensToString(
           .trim()
           .split("\n")
           .map(
-            (line) =>
-              "  "
-              + line
-              + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 2),
+            (line) => "  " + line + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 2),
           )
           .join("\n");
         contentStrings.push(
@@ -306,6 +353,8 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            indent,
+            parentAlignment,
           ),
         );
         break;
@@ -322,6 +371,8 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            indent,
+            parentAlignment,
           )),
         );
         contentStrings.push(
@@ -330,6 +381,8 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            indent,
+            parentAlignment,
           ),
         );
         break;

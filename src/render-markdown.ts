@@ -184,7 +184,7 @@ async function renderTable(
 export async function renderMarkdown(
   tokens: ProcessedToken[],
   ctx: RenderContext,
-  languageToNerdFontIconMap: { default: string;[value: string]: string },
+  languageToNerdFontIconMap: { default: string; [value: string]: string },
   noRenderHeadings: boolean,
   noRenderImages: boolean,
   width: string,
@@ -231,15 +231,13 @@ export async function renderMarkdown(
               noRenderImages
                 ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
                 : image.load(
-                  ctx,
-                  ctx.width - 2,
-                  content.length > 1, // this argument is a boolean!
-                ),
+                    ctx,
+                    ctx.width - 2,
+                    content.length > 1, // this argument is a boolean!
+                  ),
             );
           } else if (element.type === "text") {
-            paragraphBox.add(
-              new TextRenderable(ctx, { content: element.content }),
-            );
+            paragraphBox.add(new TextRenderable(ctx, { content: element.content }));
           }
         }
         componentArray.push(paragraphBox);
@@ -294,9 +292,7 @@ export async function renderMarkdown(
           });
           componentArray.push(heading);
           console.log({
-            headingText: heading.content.chunks
-              .map((chunk) => chunk.text)
-              .join(),
+            headingText: heading.content.chunks.map((chunk) => chunk.text).join(),
             headingHeight: heading.height,
           });
           if (tokenContent.links.chunks.length > 0) {
@@ -403,9 +399,7 @@ export async function renderMarkdown(
         });
         for (const listItem of token.content as ProcessedToken[]) {
           if (listItem.type !== "list_item")
-            throw new Error(
-              `Expected type "list_item" but got ${listItem.type}`,
-            );
+            throw new Error(`Expected type "list_item" but got ${listItem.type}`);
           const transformedListItem = makeTaskList(listItem);
           const listContent = transformedListItem.content;
           const listRenderables = await renderMarkdown(
@@ -426,9 +420,7 @@ export async function renderMarkdown(
                 },
                 Text({
                   content:
-                    index === 0
-                      ? `${String(number).padStart(markerWidth)}.`
-                      : " ",
+                    index === 0 ? `${String(number).padStart(markerWidth)}.` : " ",
                 }),
                 Box({}, listRenderable),
               ),
@@ -543,8 +535,7 @@ export async function renderMarkdown(
         };
         const language = codeTokenContent.language;
         const icon =
-          languageToNerdFontIconMap[language]
-          ?? languageToNerdFontIconMap.default;
+          languageToNerdFontIconMap[language] ?? languageToNerdFontIconMap.default;
         const box = new BoxRenderable(ctx, {
           paddingLeft: 2,
           paddingRight: 2,

@@ -193,9 +193,9 @@ export default function parse(input: string) {
             (token) => token.type === "code_open",
           );
           if (
-            codeTokenIndex !== -1 &&
-            inlineTokenList[codeTokenIndex + 1]?.type === "text" &&
-            inlineTokenList[codeTokenIndex + 2]?.type === "code_close"
+            codeTokenIndex !== -1
+            && inlineTokenList[codeTokenIndex + 1]?.type === "text"
+            && inlineTokenList[codeTokenIndex + 2]?.type === "code_close"
           ) {
             const codeToken = new TokenClass("code_inline", "code", 0);
             const codeTextToken: Token | undefined =

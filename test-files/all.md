@@ -24,8 +24,8 @@ Setext H2
 
 ## Paragraphs and line breaks
 
-A normal paragraph spans multiple source lines and should become one paragraph.
-Two trailing spaces create a hard line break.  
+A normal paragraph spans multiple source lines and should become one paragraph. Two
+trailing spaces create a hard line break.  
 This line follows the hard break.
 
 A backslash creates a hard line break too.\
@@ -36,8 +36,8 @@ This line follows it.
 _italic_ _italic_ **bold** **bold** _**bold italic**_ _**bold italic**_
 ~~strikethrough~~
 
-Nested: **bold with _italic_ inside**, _italic with **bold** inside_, and
-~~**bold strike**~~.
+Nested: **bold with _italic_ inside**, _italic with **bold** inside_, and ~~**bold
+strike**~~.
 
 ## Inline code
 
@@ -134,9 +134,9 @@ https://example.com/autolink
 
 ## Escapes
 
-\*literal asterisks\* \_literal underscores\_ \# literal hash \[literal
-brackets\] \`literal backticks\` \\ literal backslash \> literal greater-than
-sign \+ literal plus \- literal hyphen \1. literal ordered-list-looking text
+\*literal asterisks\* \_literal underscores\_ \# literal hash \[literal brackets\]
+\`literal backticks\` \\ literal backslash \> literal greater-than sign \+ literal
+plus \- literal hyphen \1. literal ordered-list-looking text
 
 ## Fenced code blocks
 
@@ -248,8 +248,7 @@ The same footnote can be reused.[^one]
 
 [^one]: A simple footnote.
 
-[^note]:
-    A footnote containing **bold**, `code`, and a [link](https://github.com/).
+[^note]: A footnote containing **bold**, `code`, and a [link](https://github.com/).
 
 ## HTML blocks
 
@@ -384,15 +383,15 @@ endsolid triangle
 ## Long wrapping paragraph
 
 GitHub-Flavored Markdown supports a large collection of Markdown constructs and
-GitHub extensions. This deliberately long paragraph exists to test terminal
-wrapping, reflow, scrolling, line measurement, and interaction with inline
-markup such as **bold**, _italic_, `code`, [links](https://github.com/), and
-emoji :rocket: across narrow and wide terminal sizes.
+GitHub extensions. This deliberately long paragraph exists to test terminal wrapping,
+reflow, scrolling, line measurement, and interaction with inline markup such as
+**bold**, _italic_, `code`, [links](https://github.com/), and emoji :rocket: across
+narrow and wide terminal sizes.
 
 ## Weird-but-valid inline combinations
 
-_**bold italic**_, **_bold italic_**, _**italic bold**_, ~~**bold strike**~~,
-`code` [link](https://github.com/) and <kbd>key</kbd>.
+_**bold italic**_, **_bold italic_**, _**italic bold**_, ~~**bold strike**~~, `code`
+[link](https://github.com/) and <kbd>key</kbd>.
 
 ## Everything together
 

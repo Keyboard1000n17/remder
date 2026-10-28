@@ -40,7 +40,7 @@ export function alignText(
       .map((line) =>
         line.padStart(
           Math.max(0, Math.floor((width - Bun.stringWidth(line)) / 2))
-          + Bun.stringWidth(line),
+            + Bun.stringWidth(line),
         ),
       )
       .join("\n");
@@ -73,8 +73,7 @@ export function chunksToAnsi(chunks: TextChunk[]) {
       if (attrs && attrs & TextAttributes.ITALIC) text = chalk.italic(text);
       if (attrs && attrs & TextAttributes.STRIKETHROUGH)
         text = chalk.strikethrough(text);
-      if (attrs && attrs & TextAttributes.UNDERLINE)
-        text = chalk.underline(text);
+      if (attrs && attrs & TextAttributes.UNDERLINE) text = chalk.underline(text);
       return text;
     })
     .join("");

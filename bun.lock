@@ -20,9 +20,11 @@
         "markdown-it-emoji": "^3.1.0",
         "markdown-it-github-alerts": "^1.0.1",
         "shiki": "^4.5.0",
+        "supports-terminal-graphics": "^0.1.0",
         "table": "^6.9.0",
         "terminal-image": "^5.0.1",
         "terminal-link": "^5.0.0",
+        "terminal-query": "^0.1.1",
         "tslog": "^5.4.0",
       },
       "devDependencies": {
@@ -34,6 +36,9 @@
         "typescript": "^7.0.2",
       },
     },
+  },
+  "patchedDependencies": {
+    "terminal-image@5.0.1": "patches/terminal-image@5.0.1.patch",
   },
   "packages": {
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
@@ -499,6 +504,8 @@
     "terminal-image": ["terminal-image@5.0.1", "", { "dependencies": { "@sindresorhus/gifkit": "^0.1.0", "chalk": "^5.6.2", "image-dimensions": "^2.5.1", "jimp": "^1.6.1", "log-update": "^8.0.0", "supports-terminal-graphics": "^0.1.0", "term-img": "^7.1.0" } }, "sha512-SKVV70CtQ+lpo9gF9hi0orIIPa9bsIJlRtcH6srSJ4A4K/4AgsjbQglhd38Vxgdt/aCdtnAxNPm5V46rcIpvJA=="],
 
     "terminal-link": ["terminal-link@5.0.0", "", { "dependencies": { "ansi-escapes": "^7.0.0", "supports-hyperlinks": "^4.1.0" } }, "sha512-qFAy10MTMwjzjU8U16YS4YoZD+NQLHzLssFMNqgravjbvIPNiqkGFR4yjhJfmY9R5OFU7+yHxc6y+uGHkKwLRA=="],
+
+    "terminal-query": ["terminal-query@0.1.1", "", {}, "sha512-MlkY08iL6mCFtdiyOKRzJqTHvUFEKCTRZZDLOdN1Vk79rX6ALq2tk2p3IfQhJJbnNLxHZnQu+WS2JT9kwLW2vQ=="],
 
     "tinycolor2": ["tinycolor2@1.6.0", "", {}, "sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw=="],
 

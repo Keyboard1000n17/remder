@@ -1,6 +1,8 @@
 - foo
   - bar
-  - baz  
+  - baz
 - **lorem**
+
 * ipsum
-+ dolor sit amet
+
+- dolor sit amet

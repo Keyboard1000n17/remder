@@ -1,12 +1,7 @@
 import Chalk from "chalk";
 import * as Shiki from "shiki";
 import type { Token } from "markdown-it";
-import {
-  createTextAttributes,
-  RGBA,
-  StyledText,
-  type TextChunk,
-} from "@opentui/core";
+import { createTextAttributes, RGBA, StyledText, type TextChunk } from "@opentui/core";
 import { Logger } from "tslog";
 import Image from "./image-class";
 
@@ -225,17 +220,14 @@ const enum FontStyle {
 
 let state: StateEntry[] = []; // global var
 
-async function image(token: Token, filePath: string) {
+export async function image(token: Token, filePath: string) {
   // token here should be the image token inside an inline token
   if (token.type !== "image")
     throw new Error(`Wrong token type: expected image but got ${token.type} `);
   const path = token.attrGet("src");
-  if (typeof path !== "string")
-    throw new Error("Something went wrong, this shouldn't happen!");
+  if (typeof path !== "string") throw new Error("Something went wrong, this shouldn't happen!");
   const alt =
-    (token.attrGet("alt") as string)
-    || token.children?.[0]?.content
-    || "No alt text provided";
+    (token.attrGet("alt") as string) || token.children?.[0]?.content || "No alt text provided";
   return new Image(String(path), filePath, alt, token);
 }
 
@@ -257,8 +249,7 @@ async function renderInline(token: Token, filePath?: string) {
   const tempChunks: TextChunk[] = [];
   if (token.type === "inline") {
     state.push("inline");
-    if (!token.children)
-      throw new Error(`Something went wrong.This shouldn't happen.`);
+    if (!token.children) throw new Error(`Something went wrong. This shouldn't happen.`);
     const styleAliases: Record<string, string> = {
       strong: "bold",
       em: "italic",
@@ -286,8 +277,7 @@ async function renderInline(token: Token, filePath?: string) {
     };
     for (let i = 0; i < token.children.length; i++) {
       const child = token.children[i];
-      if (!child)
-        throw new Error(`Something went wrong. This shouldn't happen.`);
+      if (!child) throw new Error(`Something went wrong. This shouldn't happen.`);
       const type = child.type;
       if (type === "link_open") {
         //#region links
@@ -295,8 +285,7 @@ async function renderInline(token: Token, filePath?: string) {
         const linkUrl = (child.attrGet("href") as string) ?? "";
         i++;
         const linkTextToken = token.children[i];
-        if (!linkTextToken)
-          throw new Error(`Something went wrong. This shouldn't happen.`);
+        if (!linkTextToken) throw new Error(`Something went wrong. This shouldn't happen.`);
         tempChunks.push({
           __isChunk: true,
           text: linkTextToken.content,
@@ -311,8 +300,7 @@ async function renderInline(token: Token, filePath?: string) {
         const abbreviation = String(child.attrGet("title"));
         i++;
         const abbrTextToken = token.children[i];
-        if (!abbrTextToken)
-          throw new Error(`Something went wrong. This shouldn't happen.`);
+        if (!abbrTextToken) throw new Error(`Something went wrong. This shouldn't happen.`);
         const abbreviatedText = abbrTextToken.content ?? "";
         pushText(
           abbreviation && abbreviation.length > 0
@@ -374,15 +362,12 @@ async function renderInline(token: Token, filePath?: string) {
 
 function heading(token: Token, level = 1) {
   if (token?.type !== "inline")
-    throw new Error(
-      `Wrong token type: expected type inline but got ${token?.type} `,
-    );
+    throw new Error(`Wrong token type: expected type inline but got ${token?.type} `);
   const links: { text: string; url: string }[] = [];
   let index = 0;
   let text = "";
   const children: Token[] | null = token.children;
-  if (!children)
-    throw new Error("Something went wrong, this shouldn't happen.");
+  if (!children) throw new Error("Something went wrong, this shouldn't happen.");
   while (index < children.length) {
     const child = children[index];
     if (!child) throw new Error("Something went wrong, this shouldn't happen.");
@@ -391,9 +376,7 @@ function heading(token: Token, level = 1) {
       index++;
       const linkTextToken = children[index];
       if (!linkTextToken)
-        throw new Error(
-          Chalk.red.bold(`Something went wrong. This shouldn't happen.`),
-        );
+        throw new Error(Chalk.red.bold(`Something went wrong. This shouldn't happen.`));
       const linkText = linkTextToken.content;
       links.push({ text: linkText, url: linkUrl });
     } else {
@@ -459,10 +442,7 @@ export async function table(tokens: Token[], filePath: string) {
   let currentAlign = "";
 
   // State & Parsing Handlers
-  const handlers: Record<
-    string,
-    (t: Token, filePath: string) => void | Promise<void>
-  > = {
+  const handlers: Record<string, (t: Token, filePath: string) => void | Promise<void>> = {
     thead_open: (): void => {
       state.push("thead");
     },
@@ -482,9 +462,7 @@ export async function table(tokens: Token[], filePath: string) {
       if (currentRow) tableRows.push(currentRow.splice(0));
     },
     th_open: (token: Token): void => {
-      const alignMatch = String(token.attrGet("style"))?.match(
-        /text-align:\s*(\w+)/,
-      );
+      const alignMatch = String(token.attrGet("style"))?.match(/text-align:\s*(\w+)/);
       currentAlign =
         alignMatch?.[1] === "left"
           ? "flex-start"
@@ -493,9 +471,7 @@ export async function table(tokens: Token[], filePath: string) {
             : (alignMatch?.[1] ?? "center");
     },
     td_open: (token: Token): void => {
-      const alignMatch = String(token.attrGet("style"))?.match(
-        /text-align:\s*(\w+)/,
-      );
+      const alignMatch = String(token.attrGet("style"))?.match(/text-align:\s*(\w+)/);
       currentAlign =
         alignMatch?.[1] === "left"
           ? "flex-start"
@@ -534,17 +510,10 @@ async function alerts(tokens: Token[], filePath: string): Promise<AlertToken> {
   };
 }
 
-async function details(
-  tokens: Token[],
-  filePath: string,
-): Promise<ProcessedToken[]> {
+async function details(tokens: Token[], filePath: string): Promise<ProcessedToken[]> {
   const tokenStack = [];
-  const summaryOpenTokenIndex = tokens.findIndex(
-    (token) => token.type === "summary_open",
-  );
-  const summaryCloseTokenIndex = tokens.findIndex(
-    (token) => token.type === "summary_close",
-  );
+  const summaryOpenTokenIndex = tokens.findIndex((token) => token.type === "summary_open");
+  const summaryCloseTokenIndex = tokens.findIndex((token) => token.type === "summary_close");
   if (summaryOpenTokenIndex !== -1 && summaryCloseTokenIndex !== -1) {
     if (!tokens[1]) throw new Error("How did this happen?");
     tokenStack.push({
@@ -557,10 +526,7 @@ async function details(
     } satisfies DetailsSummaryToken);
     tokenStack.push({
       type: "content",
-      content: await stylize(
-        tokens.slice(summaryCloseTokenIndex + 1),
-        filePath,
-      ),
+      content: await stylize(tokens.slice(summaryCloseTokenIndex + 1), filePath),
       properties: {},
     } satisfies DetailsContentToken);
   } else {
@@ -599,31 +565,19 @@ const handleTokens: Handlers = {
     });
     return;
   },
-  paragraph: async (tokens: Token[], filePath: string) =>
-    await renderInline(tokens[0]!, filePath), // it's always just one inline token
-  table: async (tokens: Token[], filePath: string) =>
-    await table(tokens, filePath),
-  heading: async (tokens: Token[], _, level?: number | 1) =>
-    heading(tokens[0]!, level),
-  div: async (tokens: Token[], filePath: string) =>
-    await stylize(tokens, filePath),
-  blockquote: async (tokens: Token[], filePath: string) =>
-    await stylize(tokens, filePath),
-  bullet_list: async (tokens: Token[], filePath: string) =>
-    await stylize(tokens, filePath),
-  ordered_list: async (tokens: Token[], filePath: string) =>
-    await stylize(tokens, filePath),
-  list_item: async (tokens: Token[], filePath: string) =>
-    await stylize(tokens, filePath),
-  ruby: async (tokens: Token[], filePath: string) =>
-    await stylize(tokens, filePath),
+  paragraph: async (tokens: Token[], filePath: string) => await renderInline(tokens[0]!, filePath), // it's always just one inline token
+  table: async (tokens: Token[], filePath: string) => await table(tokens, filePath),
+  heading: async (tokens: Token[], _, level?: number | 1) => heading(tokens[0]!, level),
+  div: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
+  blockquote: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
+  bullet_list: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
+  ordered_list: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
+  list_item: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
+  ruby: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
   // these ones recurse because they're container blocks
-  details: async (tokens: Token[], filePath: string) =>
-    await details(tokens, filePath),
-  rp: async (tokens: Token[], filePath: string) =>
-    await renderInline(tokens[0]!, filePath),
-  rt: async (tokens: Token[], filePath: string) =>
-    await renderInline(tokens[0]!, filePath),
+  details: async (tokens: Token[], filePath: string) => await details(tokens, filePath),
+  rp: async (tokens: Token[], filePath: string) => await renderInline(tokens[0]!, filePath),
+  rt: async (tokens: Token[], filePath: string) => await renderInline(tokens[0]!, filePath),
   pre: async (tokens: Token[]) => {
     let builtString = "";
     for (const token of tokens) {
@@ -661,9 +615,7 @@ function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
             content: token.content.map((row) =>
               row
                 .map((cell) => {
-                  const removedWhitespaceTokens = removeWhitespaceTokens(
-                    cell.content,
-                  );
+                  const removedWhitespaceTokens = removeWhitespaceTokens(cell.content);
                   if (removedWhitespaceTokens.length === 0) return;
                   return {
                     ...cell,
@@ -703,10 +655,7 @@ function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
     });
 }
 
-export default async function stylize(
-  input: Token[],
-  filePath: string,
-): Promise<ProcessedToken[]> {
+export default async function stylize(input: Token[], filePath: string): Promise<ProcessedToken[]> {
   // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
   let index = 0;
@@ -738,10 +687,7 @@ export default async function stylize(
         index++;
       }
       accumulatedTokens.push(input[index]); // should push a token with type "alert_close"
-      const processedAlertToken = await alerts(
-        accumulatedTokens as Token[],
-        filePath,
-      );
+      const processedAlertToken = await alerts(accumulatedTokens as Token[], filePath);
       push = processedAlertToken;
     } else if (token.type.match(/_open/)) {
       const accumulatedTokens: Token[] = [];
@@ -767,19 +713,14 @@ export default async function stylize(
               filePath,
               parseInt(token.tag.split("")[1]!),
             )) as HeadingObject)
-            : ((await handler(
-              accumulatedTokens,
-              filePath,
-            )) as ProcessedToken[]);
+            : ((await handler(accumulatedTokens, filePath)) as ProcessedToken[]);
         if (accumulatedTokenContentString.length > 0) {
           const unknownTagString: ProcessedToken = {
             type: "paragraph",
             content: [
               {
                 type: "text",
-                content: new StyledText([
-                  { __isChunk: true, text: accumulatedTokenContentString },
-                ]),
+                content: new StyledText([{ __isChunk: true, text: accumulatedTokenContentString }]),
                 properties: {},
               },
             ],
@@ -809,9 +750,7 @@ export default async function stylize(
       throw new Error(
         "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function"
         + "\n"
-        + Chalk.dim(
-          `PS: the token type was ${token.type}. Its index is ${index} `,
-        ),
+        + Chalk.dim(`PS: the token type was ${token.type}. Its index is ${index} `),
       );
     }
 

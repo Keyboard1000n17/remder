@@ -1,0 +1,181 @@
+diff --git a/node_modules/terminal-image/.bun-tag-2087c6e0a381e306 b/.bun-tag-2087c6e0a381e306
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/index.js b/index.js
+index 75fbc4394cb748cf07b4459b32c66ee2e11d1c09..c9e3549171f09eeea3fab972d2500248570744b3 100644
+--- a/index.js
++++ b/index.js
+@@ -1,14 +1,14 @@
+ import process from 'node:process';
+ import fs from 'node:fs';
+ import fsPromises from 'node:fs/promises';
+-import {Buffer} from 'node:buffer';
++import { Buffer } from 'node:buffer';
+ import chalk from 'chalk';
+-import {Jimp, intToRGBA} from 'jimp';
++import { Jimp, intToRGBA } from 'jimp';
+ import termImg from 'term-img';
+ import logUpdate from 'log-update';
+-import {imageDimensionsFromData} from 'image-dimensions';
++import { imageDimensionsFromData } from 'image-dimensions';
+ import supportsTerminalGraphics from 'supports-terminal-graphics';
+-import {playGif} from './gif.js';
++import { playGif } from './gif.js';
+ 
+ // `log-update` adds an extra newline so the generated frames need to be 2 pixels shorter.
+ const ROW_OFFSET = 2;
+@@ -20,7 +20,7 @@ function scale(width, height, originalWidth, originalHeight) {
+ 	const factor = (width / height > originalRatio ? height / originalHeight : width / originalWidth);
+ 	width = factor * originalWidth;
+ 	height = factor * originalHeight;
+-	return {width, height};
++	return { width, height };
+ }
+ 
+ function checkAndGetDimensionValue(value, percentageBase) {
+@@ -46,7 +46,7 @@ function resolveKittyDimension(value, terminalLimit) {
+ 	return Math.min(checkAndGetDimensionValue(value, terminalLimit), terminalLimit);
+ }
+ 
+-function calculateWidthHeight({width: imageWidth, height: imageHeight}, inputWidth, inputHeight, preserveAspectRatio) {
++function calculateWidthHeight({ width: imageWidth, height: imageHeight }, inputWidth, inputHeight, preserveAspectRatio) {
+ 	const terminalColumns = process.stdout.columns || 80;
+ 	const terminalRows = Math.max(1, (process.stdout.rows || 24) - ROW_OFFSET);
+ 
+@@ -58,7 +58,7 @@ function calculateWidthHeight({width: imageWidth, height: imageHeight}, inputWid
+ 		height = checkAndGetDimensionValue(inputHeight, terminalRows) * 2;
+ 
+ 		if (preserveAspectRatio) {
+-			({width, height} = scale(width, height, imageWidth, imageHeight));
++			({ width, height } = scale(width, height, imageWidth, imageHeight));
+ 		}
+ 	} else if (inputWidth) {
+ 		width = checkAndGetDimensionValue(inputWidth, terminalColumns);
+@@ -67,33 +67,33 @@ function calculateWidthHeight({width: imageWidth, height: imageHeight}, inputWid
+ 		height = checkAndGetDimensionValue(inputHeight, terminalRows) * 2;
+ 		width = imageWidth * height / imageHeight;
+ 	} else {
+-		({width, height} = scale(terminalColumns, terminalRows * 2, imageWidth, imageHeight));
++		({ width, height } = scale(terminalColumns, terminalRows * 2, imageWidth, imageHeight));
+ 	}
+ 
+ 	if (width > terminalColumns) {
+-		({width, height} = scale(terminalColumns, terminalRows * 2, width, height));
++		({ width, height } = scale(terminalColumns, terminalRows * 2, width, height));
+ 	}
+ 
+ 	width = Math.round(width);
+ 	height = Math.round(height);
+ 
+-	return {width, height};
++	return { width, height };
+ }
+ 
+-async function render(buffer, {width: inputWidth, height: inputHeight, preserveAspectRatio}) {
++async function render(buffer, { width: inputWidth, height: inputHeight, preserveAspectRatio }) {
+ 	const image = await Jimp.fromBuffer(Buffer.from(buffer));
+-	const {bitmap} = image;
++	const { bitmap } = image;
+ 
+-	const {width, height} = calculateWidthHeight(bitmap, inputWidth, inputHeight, preserveAspectRatio);
++	const { width, height } = calculateWidthHeight(bitmap, inputWidth, inputHeight, preserveAspectRatio);
+ 
+-	image.resize({w: width, h: height});
++	image.resize({ w: width, h: height });
+ 
+ 	const lines = [];
+ 	for (let y = 0; y < bitmap.height - 1; y += 2) {
+ 		let line = '';
+ 		for (let x = 0; x < bitmap.width; x++) {
+-			const {r, g, b, a} = intToRGBA(image.getPixelColor(x, y));
+-			const {r: r2, g: g2, b: b2} = intToRGBA(image.getPixelColor(x, y + 1));
++			const { r, g, b, a } = intToRGBA(image.getPixelColor(x, y));
++			const { r: r2, g: g2, b: b2 } = intToRGBA(image.getPixelColor(x, y + 1));
+ 			line += a === 0 ? chalk.reset.rgb(r2, g2, b2)(PIXEL) : chalk.bgRgb(r, g, b).rgb(r2, g2, b2)(PIXEL);
+ 		}
+ 
+@@ -116,6 +116,7 @@ function drawImageWithKitty(buffer, columns, rows) {
+ 	// Build control data
+ 	// `q=2` suppresses the terminal's `OK`/error responses, which would otherwise leak onto the shell as visible text (e.g. `Gi=0;OK`).
+ 	let controlData = 'f=100,a=T,q=2'; // PNG format, transmit and display, suppress responses
++	let kittyImageString = "";
+ 
+ 	// Add sizing parameters if specified
+ 	if (columns !== undefined && columns > 0) {
+@@ -132,12 +133,13 @@ function drawImageWithKitty(buffer, columns, rows) {
+ 
+ 		if (index === 0) {
+ 			// First chunk includes all control data
+-			process.stdout.write(`\u{1B}_G${controlData},m=${isLast ? 0 : 1};${chunk}\u{1B}\\`);
++			kittyImageString += `\u{1B}_G${controlData},m=${isLast ? 0 : 1};${chunk}\u{1B}\\`;
+ 		} else {
+ 			// Subsequent chunks only need the `m` flag, plus `q=2` so the response emitted after the last chunk stays suppressed.
+-			process.stdout.write(`\u{1B}_Gq=2,m=${isLast ? 0 : 1};${chunk}\u{1B}\\`);
++			kittyImageString += `\u{1B}_Gq=2,m=${isLast ? 0 : 1};${chunk}\u{1B}\\`;
+ 		}
+ 	}
++	return kittyImageString;
+ }
+ 
+ // The Kitty protocol doesn't directly support "fit within bounds while maintaining aspect ratio"
+@@ -158,7 +160,7 @@ function constrainKittyDimensions(buffer, columns, rows) {
+ 	return imageAspectRatio > terminalAspectRatio ? [columns, undefined] : [undefined, rows];
+ }
+ 
+-async function renderKitty(buffer, {width: inputWidth, height: inputHeight, preserveAspectRatio}) {
++async function renderKitty(buffer, { width: inputWidth, height: inputHeight, preserveAspectRatio }) {
+ 	// Terminal dimensions with safety margins
+ 	const terminalColumns = (process.stdout.columns || 80) - 2;
+ 	const terminalRows = Math.max(1, (process.stdout.rows || 24) - 4);
+@@ -184,17 +186,14 @@ async function renderKitty(buffer, {width: inputWidth, height: inputHeight, pres
+ 		? constrainKittyDimensions(buffer, columns, rows)
+ 		: [columns, rows];
+ 
+-	drawImageWithKitty(imageBuffer, drawColumns, drawRows);
+-
+-	// Return empty string as the drawing is done directly
+-	return '';
++	return drawImageWithKitty(imageBuffer, drawColumns, drawRows);
+ }
+ 
+ const terminalImage = {
+-	async buffer(buffer, {width = '100%', height = '100%', preserveAspectRatio = true, isGifFrame = false, preferNativeRender = true} = {}) {
++	async buffer(buffer, { width = '100%', height = '100%', preserveAspectRatio = true, isGifFrame = false, preferNativeRender = true } = {}) {
+ 		// If not using native terminal rendering, fallback to ANSI
+ 		if (!preferNativeRender) {
+-			return render(buffer, {height, width, preserveAspectRatio});
++			return render(buffer, { height, width, preserveAspectRatio });
+ 		}
+ 
+ 		// Although iTerm2 reports Kitty support (3.6.1+), it doesn't reliably render it, so prefer its own native inline-image protocol (handled by `term-img` below).
+@@ -205,9 +204,10 @@ const terminalImage = {
+ 		if (!isGifFrame && !isITerm2 && supportsTerminalGraphics.stdout.kitty) {
+ 			// Use terminal graphics protocol for high-quality rendering
+ 			try {
+-				return await renderKitty(buffer, {width, height, preserveAspectRatio});
++				return await renderKitty(buffer, { width, height, preserveAspectRatio });
+ 			} catch {
+-				return render(buffer, {height, width, preserveAspectRatio});
++				process.stderr.write("kitty failed")
++				return render(buffer, { height, width, preserveAspectRatio });
+ 			}
+ 		}
+ 
+@@ -215,7 +215,7 @@ const terminalImage = {
+ 		return termImg(buffer, {
+ 			width,
+ 			height,
+-			fallback: () => render(buffer, {height, width, preserveAspectRatio}),
++			fallback: () => render(buffer, { height, width, preserveAspectRatio }),
+ 		});
+ 	},
+ 
+@@ -263,7 +263,7 @@ const terminalImage = {
+ 				return;
+ 			}
+ 
+-			const renderedFrame = await terminalImage.buffer(frameData, {...options, isGifFrame: true});
++			const renderedFrame = await terminalImage.buffer(frameData, { ...options, isGifFrame: true });
+ 			if (isFinalized) {
+ 				return;
+ 			}

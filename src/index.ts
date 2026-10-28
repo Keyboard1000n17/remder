@@ -51,10 +51,7 @@ if (args.values.help) {
     ["-h, --help", "Print this help message and exit"],
     ["-d, --debug", "Enable debug mode (enables console)"],
     ["-i, --no-render-images", "Disable rendering images"],
-    [
-      "-H, --no-render-headings",
-      "Render headings with color instead of huge text",
-    ],
+    ["-H, --no-render-headings", "Render headings with color instead of huge text"],
     ["-w, --width <width>", "Set the TUI width"],
     ["-y, --height <height>", "Set the TUI height"],
   ];
@@ -72,8 +69,7 @@ if (args.values.help) {
 //#endregion
 
 //#region icon map
-const languageToNerdFontIconMap: { [value: string]: string; default: string } =
-{
+const languageToNerdFontIconMap: { [value: string]: string; default: string } = {
   "angular-html": "\ued4b",
   "angular-ts": "\ued4b",
   apache: "\ue72b",
@@ -418,9 +414,7 @@ homeRenderable.add(menu);
 const fuzzysortSnapshot = fuzzysort.snapshot(optionsArray, { key: "value" });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
   resetDocumentState();
-  contentScrollBox
-    .getChildren()
-    .forEach((child) => contentScrollBox.remove(child));
+  contentScrollBox.getChildren().forEach((child) => contentScrollBox.remove(child));
   const removeSpinner = loadSpinner(contentScrollBox);
   // loadSpinner returns a function that removes the spinner when called!
   root.add(contentScrollBox);
@@ -485,10 +479,7 @@ const contentScrollBoxOpts = {
     paddingLeft: 1,
   },
 };
-const contentScrollBox = new ScrollBoxRenderable(
-  renderer,
-  contentScrollBoxOpts,
-);
+const contentScrollBox = new ScrollBoxRenderable(renderer, contentScrollBoxOpts);
 
 const searchBox = new InputRenderable(renderer, {
   flexGrow: 1,
@@ -552,9 +543,9 @@ keymap.registerLayer({
       run() {
         focusedElement === "content"
           ? (
-            root.findDescendantById(`root-scrollbox`) as
-            ScrollBoxRenderable | undefined
-          )?.scrollBy(1)
+              root.findDescendantById(`root-scrollbox`) as
+                ScrollBoxRenderable | undefined
+            )?.scrollBy(1)
           : menu?.moveDown();
       },
     },
@@ -565,9 +556,9 @@ keymap.registerLayer({
       run() {
         focusedElement === "content"
           ? (
-            root.findDescendantById(`root-scrollbox`) as
-            ScrollBoxRenderable | undefined
-          )?.scrollBy(-1)
+              root.findDescendantById(`root-scrollbox`) as
+                ScrollBoxRenderable | undefined
+            )?.scrollBy(-1)
           : menu?.moveUp();
       },
     },
@@ -576,8 +567,7 @@ keymap.registerLayer({
     {
       name: "content.prevDetails",
       run() {
-        if (focusedElement !== "content" || detailsElementsArray.length < 1)
-          return;
+        if (focusedElement !== "content" || detailsElementsArray.length < 1) return;
         if (detailsElementsIndex === null) detailsElementsIndex = 0;
         detailsElementsIndex =
           (detailsElementsIndex - 1 + detailsElementsArray.length)
@@ -596,8 +586,7 @@ keymap.registerLayer({
       name: "content.nextDetails",
       run() {
         if (focusedElement !== "content") return;
-        if (focusedElement !== "content" || detailsElementsArray.length < 1)
-          return;
+        if (focusedElement !== "content" || detailsElementsArray.length < 1) return;
         if (detailsElementsIndex === null) detailsElementsIndex = -1;
         detailsElementsIndex =
           (detailsElementsIndex + 1) % detailsElementsArray.length;
@@ -664,8 +653,7 @@ keymap.registerLayer({
               contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
           });
           tocMenu.setSelectedIndex(headingIndexForToc);
-          headingIndexForToc =
-            (headingIndexForToc + 1) % headingsArrayForToc.length;
+          headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
           console.log(
             `next heading / scrolled to ${contentScrollBox ? heading.y + contentScrollBox?.scrollTop : undefined}`,
           );
@@ -751,9 +739,7 @@ keymap.registerLayer({
       name: "content.goFullPageDown",
       run() {
         if (focusedElement === "content") {
-          contentScrollBox.scrollBy(
-            Math.floor(parseInt(args.values.height) - 1),
-          );
+          contentScrollBox.scrollBy(Math.floor(parseInt(args.values.height) - 1));
           return;
         }
         if ((focusedElement = "menu")) {
@@ -984,10 +970,7 @@ const helpMenuBox = new BoxRenderable(renderer, {
       0,
       Math.floor((root.height - helpMenuBox.height) / 2),
     );
-    helpMenuBox.left = Math.max(
-      0,
-      Math.floor((root.width - helpMenuBox.width) / 2),
-    );
+    helpMenuBox.left = Math.max(0, Math.floor((root.width - helpMenuBox.width) / 2));
   },
 });
 
@@ -1035,14 +1018,8 @@ for (const section of helpSections) {
 root.add(helpMenuBox);
 
 // Center initially and whenever the layout changes
-helpMenuBox.top = Math.max(
-  0,
-  Math.floor((root.height - helpMenuBox.height) / 2),
-);
-helpMenuBox.left = Math.max(
-  0,
-  Math.floor((root.width - helpMenuBox.width) / 2),
-);
+helpMenuBox.top = Math.max(0, Math.floor((root.height - helpMenuBox.height) / 2));
+helpMenuBox.left = Math.max(0, Math.floor((root.width - helpMenuBox.width) / 2));
 //#endregion
 
 //#region table of contents
@@ -1100,10 +1077,7 @@ function syncToC() {
   if (headingsArrayForToc.length === 0 || !contentScrollBox) return;
   if (
     contentScrollBox.scrollTop
-    >= Math.max(
-      0,
-      contentScrollBox.scrollHeight - contentScrollBox.viewport.height,
-    )
+    >= Math.max(0, contentScrollBox.scrollHeight - contentScrollBox.viewport.height)
   ) {
     const lastIndex = headingsArrayForToc.length - 1;
     if (tocMenu.getSelectedIndex() !== lastIndex) {

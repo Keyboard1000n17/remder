@@ -35,9 +35,14 @@
     "markdown-it-emoji": "^3.1.0",
     "markdown-it-github-alerts": "^1.0.1",
     "shiki": "^4.5.0",
+    "supports-terminal-graphics": "^0.1.0",
     "table": "^6.9.0",
     "terminal-image": "^5.0.1",
     "terminal-link": "^5.0.0",
+    "terminal-query": "^0.1.1",
     "tslog": "^5.4.0"
+  },
+  "patchedDependencies": {
+    "terminal-image@5.0.1": "patches/terminal-image@5.0.1.patch"
   }
 }

@@ -11,6 +11,7 @@ import {
   type RenderContext,
 } from "@opentui/core";
 import { Logger } from "tslog";
+import { queryTerminal } from "terminal-query";
 
 type BufferedLog = {
   level: "log" | "error";
@@ -24,9 +25,7 @@ const options = separator === -1 ? argv : argv.slice(0, separator);
 const printToStdout = options.some(
   (arg) =>
     arg === "--print-to-stdout"
-    || (arg.startsWith("-")
-      && !arg.startsWith("--")
-      && arg.slice(1).includes("o")),
+    || (arg.startsWith("-") && !arg.startsWith("--") && arg.slice(1).includes("o")),
 );
 
 const logbuf: BufferedLog[] = [];
@@ -62,22 +61,16 @@ export default class Image {
     public imageAlt: string,
     public token: Token,
   ) {
-    this.imageBuffer = Image.#getBuffer(filePath, path);
+    this.imageBuffer = Image.getBuffer(filePath, path);
     this.type = "image";
     this.properties = {};
     this.id = randomUUID();
     this.loadState = "not loaded";
   }
-  static preferNativeRender = !/tmux|screen|^xterm$|alacritty/.test(
-    process.env.TERM || "",
-  );
-  static async #getBuffer(filePath: string, path: string) {
+  static preferNativeRender = !/tmux|screen|^xterm$|alacritty/.test(process.env.TERM || "");
+  static async getBuffer(filePath: string, path: string) {
     logger.info("path: " + path + " | " + "absolute?: " + isAbsolute(path));
-    logger.info(
-      "tried to access" + isAbsolute(path)
-        ? path
-        : join(dirname(filePath), path),
-    );
+    logger.info("tried to access" + isAbsolute(path) ? path : join(dirname(filePath), path));
     try {
       let properPath;
       const pathSeparator = /(?<!:\/|:|\\)\//;
@@ -104,7 +97,12 @@ export default class Image {
         `path is ${properPath}. file path array was ${JSON.stringify(filePathArray)}. supplied image path was ${path}`,
       );
       return URL.canParse(properPath)
-        ? (await got(properPath, { retry: { limit: 2 } })).rawBody
+        ? (
+          await got(properPath, {
+            retry: { limit: 2, maxRetryAfter: 10_000 },
+            timeout: { request: 10_000 },
+          })
+        ).rawBody
         : await Bun.file(properPath).bytes();
     } catch (err) {
       logger.error(`${err}`);
@@ -112,23 +110,30 @@ export default class Image {
     }
   }
   async getImageSize(
-    ctx: RenderContext,
     tempBuf: Uint8Array<ArrayBuffer> | Buffer<ArrayBufferLike>,
     parentWidth: number,
     makeOneRowHigh: boolean,
   ) {
     const getImageSize = (await import("image-size")).imageSize;
-    const imageSize = getImageSize(tempBuf!);
-    const res = ctx.resolution;
-    const terminalWidth = ctx.terminalWidth;
-    const terminalHeight = ctx.terminalHeight;
-    const cellAspectRatio =
-      (res?.height || 1920)
-      / (terminalHeight || 25)
-      / ((res?.width || 1080) / (terminalWidth || 80));
+    // we use another package isntead of using the resolution given by opentui
+    // because the --print-to-stdout option does not use opentui
+    const imageSize = getImageSize(tempBuf);
+    const response = await queryTerminal("\u001b[14t");
+    const dimensions = response?.match(/\u001b\[4;(\d+);(\d+)t/);
+    const terminalWidth = process.stdout.columns;
+    const terminalHeight = process.stdout.rows;
+    if (!dimensions || !terminalWidth || !terminalHeight) {
+      throw new Error("Failed to query terminal pixel and cell dimensions");
+    }
+    const pixelHeight = Number(dimensions[1]);
+    const pixelWidth = Number(dimensions[2]);
+    if (!pixelHeight || !pixelWidth) {
+      throw new Error(`Invalid terminal pixel dimensions: ${response}`);
+    }
+    const cellAspectRatio = pixelHeight / terminalHeight / (pixelWidth / terminalWidth);
     logger.info(`image type: ${imageSize.type}`);
-    const rowHeight = (res?.height || 1080) / (terminalHeight || 25);
-    const cellWidth = (res?.width || 1920) / (terminalWidth || 80);
+    const rowHeight = pixelHeight / terminalHeight;
+    const cellWidth = pixelWidth / terminalWidth;
     const pxRatio = imageSize.width / imageSize.height;
     const ratio = pxRatio * cellAspectRatio; // cellAspectRatio is around 2 usually
     let tempWidth = imageSize.width;
@@ -146,10 +151,7 @@ export default class Image {
       } else if (unit === "pt") {
         tempWidth = (integerWidth * 4) / 3;
       } else if (unit === "%") {
-        tempWidth =
-          (integerWidth / 100)
-          * (parentWidth ?? (terminalWidth || 1920))
-          * cellWidth;
+        tempWidth = (integerWidth / 100) * parentWidth * cellWidth;
       } else if (unit === "pc") {
         tempWidth = integerWidth * 16;
       } else {
@@ -175,8 +177,7 @@ export default class Image {
       tempWidth = ratio * cellWidth;
       shouldUseWidth = true;
     }
-    if (tempWidth > (parentWidth - 2) * cellWidth)
-      tempWidth = (parentWidth - 2) * cellWidth;
+    if (tempWidth > (parentWidth - 2) * cellWidth) tempWidth = (parentWidth - 2) * cellWidth;
     const width = tempWidth;
     const height = tempHeight ?? width / pxRatio;
     logger.info(
@@ -213,7 +214,7 @@ export default class Image {
       return;
     }
     const { cellWidth, rowHeight, shouldUseWidth, width, height, imageType } =
-      await this.getImageSize(ctx, tempBuf, parentWidth, makeOneRowHigh);
+      await this.getImageSize(tempBuf, parentWidth, makeOneRowHigh);
     const buf =
       imageType === "svg"
         ? new Resvg(Buffer.from(tempBuf!), {
@@ -234,9 +235,7 @@ export default class Image {
       width: Math.ceil(width / cellWidth),
       height: Math.ceil(height / rowHeight),
       onLoad: async () => {
-        logger.info(
-          `image height: px - ${height} colums - ${height / rowHeight}`,
-        );
+        logger.info(`image height: px - ${height} colums - ${height / rowHeight}`);
         clearInterval(spinnerLoop);
         spinner.visible = false;
         wrapper.remove(spinner);
@@ -262,11 +261,6 @@ export default class Image {
   load(ctx: RenderContext, parentWidth: number, makeOneRowHigh: boolean) {
     if (this.loadState === "loaded" || this.loadState === "loading") return;
     this.loadState = "loading";
-    const tokenAlign = this.token.attrGet("align") || "left";
-    if (typeof tokenAlign !== "string")
-      throw new Error(
-        `unhandled case: got ${typeof tokenAlign} instead of string | tokenAlign was ${tokenAlign} `,
-      );
     const wrapper = new BoxRenderable(ctx, {});
     const frames = Image.frames;
     const spinner = new TextRenderable(ctx, {
@@ -280,9 +274,7 @@ export default class Image {
       ]);
     }, 80);
     wrapper.add(spinner);
-    this.#finishLoad(
-      ...[ctx, wrapper, spinner, spinnerLoop, parentWidth, makeOneRowHigh],
-    );
+    this.#finishLoad(...[ctx, wrapper, spinner, spinnerLoop, parentWidth, makeOneRowHigh]);
     return wrapper;
   }
 }

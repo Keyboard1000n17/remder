@@ -7,6 +7,7 @@ export default async function tokensToString(
   termWidth: string,
   noRenderHeadings: boolean,
   languageToNerdFontIconMap: { default: string;[value: string]: string },
+  imagesShouldNotBeRendered: boolean,
   indent = 0,
   parentAlignment: "left" | "center" | "right" = "left",
 ): Promise<string> {
@@ -28,8 +29,14 @@ export default async function tokensToString(
       || terminalGraphicsSupport.sixel),
   );
   const table = tokens.some((t) => t.type === "table") && (await import("table")).table;
-  const renderImage = async (image: Image, alignment: string, inline: boolean): Promise<string> => {
-    if (!terminalImage) return chalk.gray(image.imageAlt);
+  const renderImage = async (
+    image: Image,
+    alignment: "left" | "center" | "right",
+    inline: boolean,
+    imagesShouldNotBeRendered: boolean,
+  ): Promise<string> => {
+    if (!terminalImage || imagesShouldNotBeRendered)
+      return alignText(chalk.gray(image.imageAlt), alignment, termWidth);
     const initBuf = await image.imageBuffer;
     if (!initBuf) return chalk.gray(image.imageAlt);
     const imageDimensions = await image.getImageSize(initBuf, parseInt(termWidth), inline);
@@ -87,11 +94,17 @@ export default async function tokensToString(
       case "paragraph": {
         const content = token.content;
         const paragraphItems: string[] = [];
-        const paragraphAlignment: string = token.properties.align ?? parentAlignment;
+        const paragraphAlignment: "left" | "center" | "right" =
+          token.properties.align ?? parentAlignment;
         for (const element of content) {
           if (element.type === "image") {
             paragraphItems.push(
-              await renderImage(element.content, paragraphAlignment, content.length > 1),
+              await renderImage(
+                element.content,
+                paragraphAlignment,
+                content.length > 1,
+                imagesShouldNotBeRendered,
+              ),
             );
           } else if (element.type === "text") {
             const text = chunksToAnsi(element.content.chunks);
@@ -105,7 +118,12 @@ export default async function tokensToString(
       //#region standalone image
       case "image": {
         contentStrings.push(
-          await renderImage(token.content, token.properties.align ?? parentAlignment, false),
+          await renderImage(
+            token.content,
+            token.properties.align ?? parentAlignment,
+            false,
+            imagesShouldNotBeRendered,
+          ),
         );
         break;
       }
@@ -164,6 +182,7 @@ export default async function tokensToString(
                       String(tableColumnWidth),
                       noRenderHeadings,
                       languageToNerdFontIconMap,
+                      imagesShouldNotBeRendered,
                       0,
                       cell.properties.textAlign === "flex-start"
                         ? "left"
@@ -211,6 +230,7 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            imagesShouldNotBeRendered,
             indent + 2,
             parentAlignment,
           );
@@ -240,6 +260,7 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            imagesShouldNotBeRendered,
             indent + 2,
             parentAlignment,
           );
@@ -266,6 +287,7 @@ export default async function tokensToString(
           termWidth,
           noRenderHeadings,
           languageToNerdFontIconMap,
+          imagesShouldNotBeRendered,
           indent + 2,
           parentAlignment,
         );
@@ -293,6 +315,7 @@ export default async function tokensToString(
           termWidth,
           noRenderHeadings,
           languageToNerdFontIconMap,
+          imagesShouldNotBeRendered,
           indent,
           parentAlignment,
         );
@@ -353,6 +376,7 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            imagesShouldNotBeRendered,
             indent,
             parentAlignment,
           ),
@@ -371,6 +395,7 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            imagesShouldNotBeRendered,
             indent,
             parentAlignment,
           )),
@@ -381,6 +406,7 @@ export default async function tokensToString(
             termWidth,
             noRenderHeadings,
             languageToNerdFontIconMap,
+            imagesShouldNotBeRendered,
             indent,
             parentAlignment,
           ),

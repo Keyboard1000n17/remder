@@ -58,10 +58,7 @@ if (args.values.help) {
   const optionWidth = Math.max(...options.map(([option]) => option!.length));
   const helpText = [
     "Usage: remder [options] <file?>",
-    ...options.map(
-      ([option, description]) =>
-        `  ${option!.padEnd(optionWidth + 2)}${description}`,
-    ),
+    ...options.map(([option, description]) => `  ${option!.padEnd(optionWidth + 2)}${description}`),
   ].join("\n");
   console.log(helpText);
   process.exit(0);
@@ -207,25 +204,21 @@ if (args.values.printToStdout) {
       args.values.width,
       args.values.noRenderHeadings,
       languageToNerdFontIconMap,
+      args.values.noRenderImages,
     );
-    process.stdout.write(
-      Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }),
-    );
+    process.stdout.write(Bun.wrapAnsi(content, parseInt(args.values.width), { trim: false }));
     process.exit(0);
   } else {
     const path = args.positionals.at(-1);
     if (!path)
-      throw new Error(
-        "No path specified; specify a file with the syntax `remder <options> <path>",
-      );
-    const content = URL.canParse(path)
-      ? await got(path).text()
-      : await Bun.file(path).text();
+      throw new Error("No path specified; specify a file with the syntax `remder <options> <path>");
+    const content = URL.canParse(path) ? await got(path).text() : await Bun.file(path).text();
     const processedContent = await tokensToString(
       await stylize(parseInput(content), path),
       args.values.width,
       args.values.noRenderHeadings,
       languageToNerdFontIconMap,
+      args.values.noRenderImages,
     );
     process.stdout.write(
       Bun.wrapAnsi(processedContent, parseInt(args.values.width), {
@@ -377,9 +370,7 @@ const noFilesFoundText = new TextRenderable(renderer, {
   visible: false,
   width: "100%",
 });
-homeRenderable.add(
-  await makeFigletFont("remder", 1, "left", args.values.width, renderer),
-);
+homeRenderable.add(await makeFigletFont("remder", 1, "left", args.values.width, renderer));
 homeRenderable.add(new BoxRenderable(renderer, { height: 1 }));
 homeRenderable.add(noFilesFoundText);
 root.add(homeRenderable);
@@ -498,9 +489,7 @@ const searchRow = new BoxRenderable(renderer, {
 });
 searchRow.add(
   new TextRenderable(renderer, {
-    content: new StyledText([
-      { __isChunk: true, text: "/", fg: RGBA.fromHex("#fff") },
-    ]),
+    content: new StyledText([{ __isChunk: true, text: "/", fg: RGBA.fromHex("#fff") }]),
   }),
 );
 searchRow.add(searchBox);
@@ -543,9 +532,8 @@ keymap.registerLayer({
       run() {
         focusedElement === "content"
           ? (
-              root.findDescendantById(`root-scrollbox`) as
-                ScrollBoxRenderable | undefined
-            )?.scrollBy(1)
+            root.findDescendantById(`root-scrollbox`) as ScrollBoxRenderable | undefined
+          )?.scrollBy(1)
           : menu?.moveDown();
       },
     },
@@ -556,9 +544,8 @@ keymap.registerLayer({
       run() {
         focusedElement === "content"
           ? (
-              root.findDescendantById(`root-scrollbox`) as
-                ScrollBoxRenderable | undefined
-            )?.scrollBy(-1)
+            root.findDescendantById(`root-scrollbox`) as ScrollBoxRenderable | undefined
+          )?.scrollBy(-1)
           : menu?.moveUp();
       },
     },
@@ -570,12 +557,9 @@ keymap.registerLayer({
         if (focusedElement !== "content" || detailsElementsArray.length < 1) return;
         if (detailsElementsIndex === null) detailsElementsIndex = 0;
         detailsElementsIndex =
-          (detailsElementsIndex - 1 + detailsElementsArray.length)
-          % detailsElementsArray.length;
+          (detailsElementsIndex - 1 + detailsElementsArray.length) % detailsElementsArray.length;
         const detailsElement = detailsElementsArray.at(detailsElementsIndex);
-        console.log(
-          `pressed previous details. current index is ${detailsElementsIndex}`,
-        );
+        console.log(`pressed previous details. current index is ${detailsElementsIndex}`);
         detailsElement?.focus();
         contentScrollBox.scrollBy(detailsElement?.y ?? 0);
       },
@@ -588,12 +572,9 @@ keymap.registerLayer({
         if (focusedElement !== "content") return;
         if (focusedElement !== "content" || detailsElementsArray.length < 1) return;
         if (detailsElementsIndex === null) detailsElementsIndex = -1;
-        detailsElementsIndex =
-          (detailsElementsIndex + 1) % detailsElementsArray.length;
+        detailsElementsIndex = (detailsElementsIndex + 1) % detailsElementsArray.length;
         const detailsElement = detailsElementsArray.at(detailsElementsIndex);
-        console.log(
-          `pressed next details. current index is ${detailsElementsIndex}`,
-        );
+        console.log(`pressed next details. current index is ${detailsElementsIndex}`);
         detailsElement?.focus();
         contentScrollBox.scrollBy(detailsElement?.y ?? 0);
       },
@@ -622,16 +603,14 @@ keymap.registerLayer({
       run() {
         if (headingsArrayForToc.length > 0) {
           headingIndexForToc =
-            (headingIndexForToc - 1 + headingsArrayForToc.length)
-            % headingsArrayForToc.length;
+            (headingIndexForToc - 1 + headingsArrayForToc.length) % headingsArrayForToc.length;
           const id = headingsArrayForToc[headingIndexForToc]?.id;
           if (!id) return;
           const heading = root.findDescendantById(id);
           const y = heading?.y;
           if (y === undefined || !heading) return;
           process.nextTick(() => {
-            if (contentScrollBox)
-              contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
+            if (contentScrollBox) contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
           });
           tocMenu.setSelectedIndex(headingIndexForToc);
         }
@@ -649,8 +628,7 @@ keymap.registerLayer({
           const y = heading?.y;
           if (y === undefined || !heading) return;
           process.nextTick(() => {
-            if (contentScrollBox)
-              contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
+            if (contentScrollBox) contentScrollBox.scrollTo(heading.y + contentScrollBox.scrollTop);
           });
           tocMenu.setSelectedIndex(headingIndexForToc);
           headingIndexForToc = (headingIndexForToc + 1) % headingsArrayForToc.length;
@@ -673,9 +651,7 @@ keymap.registerLayer({
     {
       name: "content.goToTop",
       run() {
-        focusedElement === "content"
-          ? contentScrollBox?.scrollTo(0)
-          : menu.setSelectedIndex(0);
+        focusedElement === "content" ? contentScrollBox?.scrollTo(0) : menu.setSelectedIndex(0);
       },
     },
     //#endregion
@@ -694,9 +670,7 @@ keymap.registerLayer({
       name: "app.goToFileMenu",
       run() {
         tocMenu.options = [];
-        contentScrollBox
-          .getChildren()
-          .forEach((child) => contentScrollBox.remove(child));
+        contentScrollBox.getChildren().forEach((child) => contentScrollBox.remove(child));
         root.remove(contentScrollBox);
         homeRenderable.visible = true;
         menu.focus();
@@ -722,9 +696,7 @@ keymap.registerLayer({
       name: "content.goFullPageUp",
       run() {
         if (focusedElement === "content") {
-          contentScrollBox.scrollBy(
-            Math.floor(-1 * (parseInt(args.values.height) - 1)),
-          );
+          contentScrollBox.scrollBy(Math.floor(-1 * (parseInt(args.values.height) - 1)));
           return;
         }
         if ((focusedElement = "menu")) {
@@ -754,9 +726,7 @@ keymap.registerLayer({
       name: "content.goHalfPageUp",
       run() {
         if (focusedElement === "content") {
-          contentScrollBox.scrollBy(
-            Math.floor((-1 * (parseInt(args.values.height) - 1)) / 2),
-          );
+          contentScrollBox.scrollBy(Math.floor((-1 * (parseInt(args.values.height) - 1)) / 2));
           return;
         }
         if ((focusedElement = "menu")) {
@@ -771,9 +741,7 @@ keymap.registerLayer({
       name: "content.goHalfPageDown",
       run() {
         if (focusedElement === "content") {
-          contentScrollBox.scrollBy(
-            Math.floor((parseInt(args.values.height) - 1) / 2),
-          );
+          contentScrollBox.scrollBy(Math.floor((parseInt(args.values.height) - 1) / 2));
           return;
         }
         if ((focusedElement = "menu")) {
@@ -919,9 +887,7 @@ const helpSections = [
     shortcuts: [
       { key: "q", description: "Quit remder" },
       { key: "?", description: "Toggle help menu" },
-      ...(args.values.debug
-        ? [{ key: "C", description: "Toggle debug console" }]
-        : []),
+      ...(args.values.debug ? [{ key: "C", description: "Toggle debug console" }] : []),
     ],
   },
   {
@@ -966,10 +932,7 @@ const helpMenuBox = new BoxRenderable(renderer, {
   visible: false,
   zIndex: 5,
   onSizeChange() {
-    helpMenuBox.top = Math.max(
-      0,
-      Math.floor((root.height - helpMenuBox.height) / 2),
-    );
+    helpMenuBox.top = Math.max(0, Math.floor((root.height - helpMenuBox.height) / 2));
     helpMenuBox.left = Math.max(0, Math.floor((root.width - helpMenuBox.width) / 2));
   },
 });

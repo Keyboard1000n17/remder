@@ -60,20 +60,16 @@ async function renderTable(
         const widths = await Promise.all(
           cell.content.map(async (token) => {
             if (token.type === "text") {
-              return Bun.stringWidth(
-                token.content.chunks.map((chunk) => chunk.text).join(""),
-              );
+              return Bun.stringWidth(token.content.chunks.map((chunk) => chunk.text).join(""));
             }
             if (token.type === "image") {
               const buf = await token.content.imageBuffer;
               if (!buf) return minWidth;
-              const { width, cellWidth: columnWidth } =
-                await token.content.getImageSize(
-                  ctx,
-                  buf,
-                  Math.max(1, maxCellWidth - 1),
-                  cell.content.length > 1,
-                );
+              const { width, cellWidth: columnWidth } = await token.content.getImageSize(
+                buf,
+                Math.max(1, maxCellWidth - 1),
+                cell.content.length > 1,
+              );
               return width / columnWidth + 2;
             }
             return minWidth;
@@ -123,13 +119,7 @@ async function renderTable(
           topLeft: isFirstRow && isFirstColumn ? "╭" : "┼",
           topRight: isFirstRow ? (isLastColumn ? "╮" : "┬") : "┼",
           bottomLeft: isLastRow ? "╰" : "├",
-          bottomRight: isLastRow
-            ? isLastColumn
-              ? "╯"
-              : "┴"
-            : isLastColumn
-              ? "┤"
-              : "┼",
+          bottomRight: isLastRow ? (isLastColumn ? "╯" : "┴") : isLastColumn ? "┤" : "┼",
           horizontal: "─",
           vertical: "│",
           topT: isFirstRow ? "┬" : "┼",
@@ -164,9 +154,7 @@ async function renderTable(
             ),
           );
         } else {
-          throw new Error(
-            `Type not recognized: expected "text" or "image" but got ${item.type}`,
-          );
+          throw new Error(`Type not recognized: expected "text" or "image" but got ${item.type}`);
         }
       }
       rowRenderable.add(cellRenderable);
@@ -174,9 +162,7 @@ async function renderTable(
     table.add(rowRenderable);
     table
       .getChildren()
-      .forEach((row) =>
-        row.getChildren().forEach((cell) => (cell.width = cellWidth)),
-      );
+      .forEach((row) => row.getChildren().forEach((cell) => (cell.width = cellWidth)));
   }
   return table;
 }
@@ -184,7 +170,7 @@ async function renderTable(
 export async function renderMarkdown(
   tokens: ProcessedToken[],
   ctx: RenderContext,
-  languageToNerdFontIconMap: { default: string; [value: string]: string },
+  languageToNerdFontIconMap: { default: string;[value: string]: string },
   noRenderHeadings: boolean,
   noRenderImages: boolean,
   width: string,
@@ -231,10 +217,10 @@ export async function renderMarkdown(
               noRenderImages
                 ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
                 : image.load(
-                    ctx,
-                    ctx.width - 2,
-                    content.length > 1, // this argument is a boolean!
-                  ),
+                  ctx,
+                  ctx.width - 2,
+                  content.length > 1, // this argument is a boolean!
+                ),
             );
           } else if (element.type === "text") {
             paragraphBox.add(new TextRenderable(ctx, { content: element.content }));
@@ -252,29 +238,17 @@ export async function renderMarkdown(
         if (noRenderHeadings) {
           const colorMap: Record<number, (str: string) => StyledText> = {
             1: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#ffa50a") },
-              ]),
+              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#ffa50a") }]),
             2: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#eeee00") },
-              ]),
+              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#eeee00") }]),
             3: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#0acadd") },
-              ]),
+              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#0acadd") }]),
             4: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#ffa5a5") },
-              ]),
+              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#ffa5a5") }]),
             5: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#22ff22") },
-              ]),
+              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#22ff22") }]),
             6: (str: string) =>
-              new StyledText([
-                { __isChunk: true, text: str, fg: RGBA.fromHex("#aaaaaa") },
-              ]),
+              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#aaaaaa") }]),
           };
           const str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
@@ -325,13 +299,7 @@ export async function renderMarkdown(
           alignSelf: token.properties.align ?? "left",
         });
         heading.add(
-          await makeFigletFont(
-            tokenContent.text,
-            tokenContent.level,
-            "left",
-            width,
-            ctx,
-          ),
+          await makeFigletFont(tokenContent.text, tokenContent.level, "left", width, ctx),
         );
         componentArray.push(heading);
         if (tokenContent.links.chunks.length > 0) {
@@ -419,8 +387,7 @@ export async function renderMarkdown(
                   gap: 1,
                 },
                 Text({
-                  content:
-                    index === 0 ? `${String(number).padStart(markerWidth)}.` : " ",
+                  content: index === 0 ? `${String(number).padStart(markerWidth)}.` : " ",
                 }),
                 Box({}, listRenderable),
               ),
@@ -475,10 +442,7 @@ export async function renderMarkdown(
       //#endregion
       //#region alerts
       case "alert": {
-        const alertIcons: Record<
-          string,
-          { icon: string; color: string; name: string }
-        > = {
+        const alertIcons: Record<string, { icon: string; color: string; name: string }> = {
           note: { icon: "\uf129", color: "#6af", name: "Note" },
           tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
           important: { icon: "\uf12a", color: "#96f", name: "Important" },
@@ -534,8 +498,7 @@ export async function renderMarkdown(
           language: string;
         };
         const language = codeTokenContent.language;
-        const icon =
-          languageToNerdFontIconMap[language] ?? languageToNerdFontIconMap.default;
+        const icon = languageToNerdFontIconMap[language] ?? languageToNerdFontIconMap.default;
         const box = new BoxRenderable(ctx, {
           paddingLeft: 2,
           paddingRight: 2,
@@ -636,8 +599,7 @@ export async function renderMarkdown(
           const detailsElementsArray = summaryBox.findDescendantById(
             `details-element-${detailsId}`,
           );
-          if (detailsElementsArray)
-            detailsElementsArray.visible = !detailsElementsArray.visible;
+          if (detailsElementsArray) detailsElementsArray.visible = !detailsElementsArray.visible;
           openIndicator.visible = !openIndicator.visible;
           closedIndicator.visible = !closedIndicator.visible;
         };

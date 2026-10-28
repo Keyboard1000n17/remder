@@ -27,25 +27,20 @@ export function alignText(
   termWidth: string,
 ): string {
   const width = parseInt(termWidth);
-  if (align === "left") {
-    return text;
-  } else if (align === "right") {
+  // note to dumb future self: padStart takes desired string length, not the number of spaces to add
+  if (align === "right") {
     return text
       .split("\n")
-      .map((line) => line.padStart(Math.max(0, width), " "))
+      .map((line) => " ".repeat(Math.floor(width - Bun.stringWidth(line))) + line)
       .join("\n");
   } else if (align === "center") {
     return text
       .split("\n")
-      .map((line) =>
-        line.padStart(
-          Math.max(0, Math.floor((width - Bun.stringWidth(line)) / 2))
-            + Bun.stringWidth(line),
-        ),
-      )
+      .map((line) => " ".repeat(Math.floor((width - Bun.stringWidth(line)) / 2)) + line)
       .join("\n");
+  } else {
+    return text;
   }
-  throw new Error(`Got align string "${align}"`);
 }
 
 /* this function converts opentui TextChunks to ANSI strings to use in
@@ -71,8 +66,7 @@ export function chunksToAnsi(chunks: TextChunk[]) {
       }
       if (attrs && attrs & TextAttributes.BOLD) text = chalk.bold(text);
       if (attrs && attrs & TextAttributes.ITALIC) text = chalk.italic(text);
-      if (attrs && attrs & TextAttributes.STRIKETHROUGH)
-        text = chalk.strikethrough(text);
+      if (attrs && attrs & TextAttributes.STRIKETHROUGH) text = chalk.strikethrough(text);
       if (attrs && attrs & TextAttributes.UNDERLINE) text = chalk.underline(text);
       return text;
     })
@@ -173,10 +167,7 @@ export function makeTaskList(item: ProcessedToken) {
               chunks[0]!.text = chunks[0]!.text.replace(startsWith[0], " ");
               chunks.unshift({
                 __isChunk: true,
-                text:
-                  startsWith?.[0].trim().toLowerCase() === "[x]"
-                    ? " \uf00c "
-                    : "   ",
+                text: startsWith?.[0].trim().toLowerCase() === "[x]" ? " \uf00c " : "   ",
                 bg: RGBA.fromHex("#808080"),
               });
             }
@@ -204,11 +195,11 @@ export function makeTaskList(item: ProcessedToken) {
   return { ...item, content };
 }
 
-const rgbToRGBA = ([r, g, b]: [number, number, number]): [
-  number,
-  number,
-  number,
-] => [r / 255, g / 255, b / 255];
+const rgbToRGBA = ([r, g, b]: [number, number, number]): [number, number, number] => [
+  r / 255,
+  g / 255,
+  b / 255,
+];
 
 const colorPalette = createColorPalette();
 

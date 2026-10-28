@@ -326,7 +326,7 @@ export default async function tokensToString(
             ` ${alertIconAndColor!.icon} ${alertIconAndColor!.name}`,
           )
           + `\n${uhb}\n`
-          + renderedAlertChildren
+          + Bun.wrapAnsi(renderedAlertChildren, parseInt(termWidth) - 2)
             .split("\n")
             .map((line) => `${uhb} ${line}`)
             .join("\n"),

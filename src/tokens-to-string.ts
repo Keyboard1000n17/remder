@@ -77,7 +77,6 @@ export default async function tokensToString(
         : normalizedAlignment === "right"
           ? Math.floor(parseInt(termWidth) - renderedImgWidth)
           : 0;
-    console.log({ imageWidthInCells, renderedImgWidth });
     if (supportsTerminalGraphics && !forceNonNativeImages) {
       // native images can be padded with spaces on just one line
       return " ".repeat(padding) + renderedImg;
@@ -368,7 +367,7 @@ export default async function tokensToString(
           )
           .join("\n");
         contentStrings.push(
-          chalk.bgHex("#181225")(
+          chalk.bgHex("#222")(
             [
               emptyLine,
               `${languageLine}${" ".repeat(boxWidth - Bun.stringWidth(languageLine))}`,

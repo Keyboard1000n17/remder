@@ -506,7 +506,7 @@ export async function renderMarkdown(
           paddingTop: 1,
           marginLeft: 1,
           rowGap: 1,
-          backgroundColor: "#181825",
+          backgroundColor: "#222",
           width: "auto",
           minWidth: 40,
           flexShrink: 0,

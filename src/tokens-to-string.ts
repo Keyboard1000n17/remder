@@ -65,7 +65,12 @@ export default async function tokensToString(
       height: Math.ceil(imageDimensions.height / imageDimensions.rowHeight),
       preferNativeRender: supportsTerminalGraphics && !forceNonNativeImages ? true : false,
     });
-    const renderedImgWidth = Math.max(...renderedImg.split("\n").map((l) => Bun.stringWidth(l)));
+    const renderedImgWidth = Math.max(
+      ...renderedImg.split("\n").map((l) => {
+        const width = Bun.stringWidth(l);
+        return width > 0 ? width : imageWidthInCells;
+      }),
+    );
     const padding =
       normalizedAlignment === "center"
         ? Math.floor((parseInt(termWidth) - renderedImgWidth) / 2)

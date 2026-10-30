@@ -51,9 +51,7 @@ function isInvalidHandle(handle: unknown): boolean {
 
 export function openWindowsConsoleInput() {
   // CreateFileW requires a null-terminated UTF-16 string.
-  const consoleName = new Uint16Array(
-    [..."CONIN$", "\0"].map((char) => char.charCodeAt(0)),
-  );
+  const consoleName = new Uint16Array([..."CONIN$", "\0"].map((char) => char.charCodeAt(0)));
 
   const handle = win32.CreateFileW(
     consoleName,
@@ -66,9 +64,7 @@ export function openWindowsConsoleInput() {
   );
 
   if (isInvalidHandle(handle)) {
-    throw new Error(
-      `CreateFileW(CONIN$) failed: Win32 error ${win32.GetLastError()}`,
-    );
+    throw new Error(`CreateFileW(CONIN$) failed: Win32 error ${win32.GetLastError()}`);
   }
 
   const originalMode = new Uint32Array(1);
@@ -88,7 +84,7 @@ export function openWindowsConsoleInput() {
 
     throw new Error(
       `SetConsoleMode(CONIN$) failed: Win32 error ${error}. `
-        + "The console may not support virtual-terminal input.",
+      + "The console may not support virtual-terminal input.",
     );
   }
 
@@ -109,7 +105,7 @@ export function openWindowsConsoleInput() {
       autoClose: true,
     });
     // Tell OpenTUI that this custom input stream represents a TTY.
-    Object.assign(stream, { isTTY: true });
+    Object.assign(stream, { isTTY: true, isRaw: true });
     // Restore the console even if the application exits unexpectedly.
     process.once("exit", restore);
     return {

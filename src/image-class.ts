@@ -12,6 +12,9 @@ import {
 } from "@opentui/core";
 import { Logger } from "tslog";
 import { queryTerminal } from "terminal-query";
+import { openSync } from "node:fs";
+import { ReadStream } from "node:tty";
+import { feature } from "bun:bundle";
 
 type BufferedLog = {
   level: "log" | "error";
@@ -47,6 +50,17 @@ logger.attachTransport({
   },
 });
 
+let terminalInput: NodeJS.ReadStream | undefined = undefined;
+
+if (process.stdin.isTTY) {
+  terminalInput = process.stdin;
+} else if (process.platform === "win32" && feature("WINDOWS_CONSOLE")) {
+  const openWindowsConsoleInput = (await import("./windows-console-input")).openWindowsConsoleInput;
+  terminalInput = openWindowsConsoleInput().stream;
+} else {
+  terminalInput = new ReadStream(openSync("/dev/tty", "r+"));
+}
+
 export default class Image {
   public imageBuffer: Promise<Uint8Array<ArrayBuffer> | undefined>;
   public type: "image";
@@ -80,7 +94,7 @@ export default class Image {
       if (URL.canParse(path)) {
         properPath = path;
       } else if (isAbsolute(path)) {
-        properPath = filePathArray[0] + path;
+        properPath = (filePathArray[0] === undefined ? "" : filePathArray[0]) + path;
       } else {
         for (const dir of pathArray) {
           if (dir === ".") {
@@ -118,7 +132,7 @@ export default class Image {
     // we use another package isntead of using the resolution given by opentui
     // because the --print-to-stdout option does not use opentui
     const imageSize = getImageSize(tempBuf);
-    const response = await queryTerminal("\u001b[14t");
+    const response = await queryTerminal("\u001b[14t", { stdin: terminalInput });
     const dimensions = response?.match(/\u001b\[4;(\d+);(\d+)t/);
     const terminalWidth = process.stdout.columns;
     const terminalHeight = process.stdout.rows;

@@ -10,6 +10,7 @@ export default async function tokensToString(
   imagesShouldNotBeRendered: boolean,
   indent = 0,
   parentAlignment: "left" | "center" | "right" = "left",
+  forceNonNativeImages = false,
 ): Promise<string> {
   const contentStrings: string[] = [];
   const chalk = (await import("chalk")).default;
@@ -59,18 +60,20 @@ export default async function tokensToString(
     const imageWidthInCells = Math.ceil(imageDimensions.width / imageDimensions.cellWidth);
     const normalizedAlignment =
       alignment === "left" || alignment === "center" || alignment === "right" ? alignment : "left";
-    const padding =
-      normalizedAlignment === "center"
-        ? Math.floor((parseInt(termWidth) - imageWidthInCells) / 2)
-        : normalizedAlignment === "right"
-          ? Math.floor(parseInt(termWidth) - imageWidthInCells)
-          : 0;
     const renderedImg = await terminalImage.buffer(buf, {
       width: imageWidthInCells,
       height: Math.ceil(imageDimensions.height / imageDimensions.rowHeight),
-      preferNativeRender: supportsTerminalGraphics ? true : false,
+      preferNativeRender: supportsTerminalGraphics && !forceNonNativeImages ? true : false,
     });
-    if (supportsTerminalGraphics) {
+    const renderedImgWidth = Math.max(...renderedImg.split("\n").map((l) => Bun.stringWidth(l)));
+    const padding =
+      normalizedAlignment === "center"
+        ? Math.floor((parseInt(termWidth) - renderedImgWidth) / 2)
+        : normalizedAlignment === "right"
+          ? Math.floor(parseInt(termWidth) - renderedImgWidth)
+          : 0;
+    console.log({ imageWidthInCells, renderedImgWidth });
+    if (supportsTerminalGraphics && !forceNonNativeImages) {
       // native images can be padded with spaces on just one line
       return " ".repeat(padding) + renderedImg;
     } else {
@@ -87,7 +90,9 @@ export default async function tokensToString(
       //#region text
       case "text":
         const content = token.content;
-        contentStrings.push(chunksToAnsi(content.chunks));
+        const text = chunksToAnsi(content.chunks);
+        const alignment = token.properties.textAlign ?? parentAlignment;
+        contentStrings.push(alignText(text, alignment, termWidth));
         break;
       //#endregion
       //#region paragraph
@@ -111,7 +116,7 @@ export default async function tokensToString(
             paragraphItems.push(text);
           }
         }
-        contentStrings.push(...paragraphItems);
+        contentStrings.push(paragraphItems.join(""));
         break;
       }
       //#endregion
@@ -169,28 +174,30 @@ export default async function tokensToString(
         // Column width excludes the table package's two spaces of cell padding.
         const tableColumnWidth = Math.max(
           1,
-          Math.floor((Number(termWidth) - 3 * columnCount - 1) / columnCount),
+          Math.floor((parseInt(termWidth) - 3 * columnCount - 1) / columnCount),
         );
+        // TODO: deal with images inside tables
+        // const imageReplacementsArray: { image: string; placeholder: string; width: number }[] = [];
         const cells = await Promise.all(
           token.content.map(
             async (row) =>
               await Promise.all(
-                row.map(
-                  async (cell) =>
-                    await tokensToString(
-                      cell.content,
-                      String(tableColumnWidth),
-                      noRenderHeadings,
-                      languageToNerdFontIconMap,
-                      imagesShouldNotBeRendered,
-                      0,
-                      cell.properties.textAlign === "flex-start"
-                        ? "left"
-                        : cell.properties.textAlign === "flex-end"
-                          ? "right"
-                          : "center",
-                    ),
-                ),
+                row.map(async (cell) => {
+                  return await tokensToString(
+                    cell.content,
+                    String(tableColumnWidth),
+                    noRenderHeadings,
+                    languageToNerdFontIconMap,
+                    imagesShouldNotBeRendered,
+                    0,
+                    cell.properties.textAlign === "flex-start"
+                      ? "left"
+                      : cell.properties.textAlign === "flex-end"
+                        ? "right"
+                        : "center",
+                    true, // non-native images
+                  );
+                }),
               ),
           ),
         );

@@ -27,7 +27,6 @@ export function alignText(
   termWidth: string,
 ): string {
   const width = parseInt(termWidth);
-  // note to dumb future self: padStart takes desired string length, not the number of spaces to add
   if (align === "right") {
     return text
       .split("\n")

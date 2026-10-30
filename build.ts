@@ -28,4 +28,4 @@ for (const target of targets) {
   }
 }
 
-export { };
+export {};

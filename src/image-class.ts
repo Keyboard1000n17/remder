@@ -127,22 +127,29 @@ export default class Image {
     tempBuf: Uint8Array<ArrayBuffer> | Buffer<ArrayBufferLike>,
     parentWidth: number,
     makeOneRowHigh: boolean,
+    ctx?: RenderContext,
   ) {
-    const getImageSize = (await import("image-size")).imageSize;
     // we use another package isntead of using the resolution given by opentui
     // because the --print-to-stdout option does not use opentui
-    const imageSize = getImageSize(tempBuf);
-    const response = await queryTerminal("\u001b[14t", { stdin: terminalInput });
-    const dimensions = response?.match(/\u001b\[4;(\d+);(\d+)t/);
+    let pixelWidth, pixelHeight;
     const terminalWidth = process.stdout.columns;
     const terminalHeight = process.stdout.rows;
-    if (!dimensions || !terminalWidth || !terminalHeight) {
-      throw new Error("Failed to query terminal pixel and cell dimensions");
-    }
-    const pixelHeight = Number(dimensions[1]);
-    const pixelWidth = Number(dimensions[2]);
-    if (!pixelHeight || !pixelWidth) {
-      throw new Error(`Invalid terminal pixel dimensions: ${response}`);
+    const getImageSize = (await import("image-size")).imageSize;
+    const imageSize = getImageSize(tempBuf);
+    if (ctx) {
+      pixelWidth = ctx.resolution?.width || 1920;
+      pixelHeight = ctx.resolution?.height || 1080;
+    } else {
+      const response = await queryTerminal("\u001b[14t", { stdin: terminalInput });
+      const dimensions = response?.match(/\u001b\[4;(\d+);(\d+)t/);
+      if (!dimensions || !terminalWidth || !terminalHeight) {
+        throw new Error("Failed to query terminal pixel and cell dimensions");
+      }
+      pixelHeight = Number(dimensions[1]);
+      pixelWidth = Number(dimensions[2]);
+      if (!pixelHeight || !pixelWidth) {
+        throw new Error(`Invalid terminal pixel dimensions: ${response}`);
+      }
     }
     const cellAspectRatio = pixelHeight / terminalHeight / (pixelWidth / terminalWidth);
     logger.info(`image type: ${imageSize.type}`);
@@ -228,7 +235,7 @@ export default class Image {
       return;
     }
     const { cellWidth, rowHeight, shouldUseWidth, width, height, imageType } =
-      await this.getImageSize(tempBuf, parentWidth, makeOneRowHigh);
+      await this.getImageSize(tempBuf, parentWidth, makeOneRowHigh, ctx);
     const buf =
       imageType === "svg"
         ? new Resvg(Buffer.from(tempBuf!), {

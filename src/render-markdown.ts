@@ -69,6 +69,7 @@ async function renderTable(
                 buf,
                 Math.max(1, maxCellWidth - 1),
                 cell.content.length > 1,
+                ctx,
               );
               return width / columnWidth + 2;
             }

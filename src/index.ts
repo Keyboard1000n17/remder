@@ -284,7 +284,8 @@ let detailsElementsIndex: number | null = null;
  * 2. if the os is not windows, we assume it is a sort of unix implementation and open
  *    an input stream on /dev/tty/
  *
- * the rest of the comments in this block are from chatgpt
+ * the rest of the comments in this block are from chatgpt, and i wrote this comment
+ * so i don't forget what it does.
  * */
 
 const stdinWasTTY = process.stdin.isTTY;

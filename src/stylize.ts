@@ -48,6 +48,7 @@ type Handler = (
   token: Token[],
   filePath: string,
   level?: number,
+  parentAlignment?: Alignment,
 ) => Promise<ProcessedToken[] | void | HeadingObject>;
 
 type Handlers = Record<string, Handler>;
@@ -218,17 +219,28 @@ const enum FontStyle {
   Strikethrough = 8,
 }
 
+type Alignment = "left" | "center" | "right";
+
+function getAlignment(token: Token, parentAlignment?: Alignment): Alignment | undefined {
+  const align = token.attrGet("align");
+  if (align === "left" || align === "center" || align === "right") {
+    return align;
+  }
+  return parentAlignment;
+}
+
 let state: StateEntry[] = []; // global var
 
-export async function image(token: Token, filePath: string) {
+export async function image(token: Token, filePath: string, parentAlignment?: Alignment) {
   // token here should be the image token inside an inline token
+  logger.info(`Creating image: ${token.attrGet("src")} | alignment: ${parentAlignment}`);
   if (token.type !== "image")
     throw new Error(`Wrong token type: expected image but got ${token.type} `);
   const path = token.attrGet("src");
   if (typeof path !== "string") throw new Error("Something went wrong, this shouldn't happen!");
   const alt =
     (token.attrGet("alt") as string) || token.children?.[0]?.content || "No alt text provided";
-  return new Image(String(path), filePath, alt, token);
+  return new Image(String(path), filePath, alt, token, parentAlignment);
 }
 
 const inline: Record<string, (text: string) => string> = {
@@ -244,7 +256,7 @@ const inline: Record<string, (text: string) => string> = {
   text: (text: string) => text,
 };
 
-async function renderInline(token: Token, filePath?: string) {
+async function renderInline(token: Token, filePath?: string, parentAlignment?: Alignment) {
   const styled: ProcessedToken[] = [];
   const tempChunks: TextChunk[] = [];
   if (token.type === "inline") {
@@ -320,14 +332,14 @@ async function renderInline(token: Token, filePath?: string) {
             type: "text",
             content: new StyledText([...tempChunks]),
             properties: {},
-          });
+          } as ProcessedToken);
         }
         tempChunks.splice(0);
         styled.push({
           type: "image",
-          content: await image(child, filePath || ""),
+          content: await image(child, filePath || "", parentAlignment),
           properties: {},
-        } as ProcessedToken);
+        });
         tempChunks.splice(0);
       } else if (type === "softbreak") {
         if (tempChunks.at(-1)) tempChunks.at(-1)!.text += " ";
@@ -510,7 +522,11 @@ async function alerts(tokens: Token[], filePath: string): Promise<AlertToken> {
   };
 }
 
-async function details(tokens: Token[], filePath: string): Promise<ProcessedToken[]> {
+async function details(
+  tokens: Token[],
+  filePath: string,
+  parentAlignment?: Alignment,
+): Promise<ProcessedToken[]> {
   const tokenStack = [];
   const summaryOpenTokenIndex = tokens.findIndex((token) => token.type === "summary_open");
   const summaryCloseTokenIndex = tokens.findIndex((token) => token.type === "summary_close");
@@ -521,12 +537,13 @@ async function details(tokens: Token[], filePath: string): Promise<ProcessedToke
       content: await stylize(
         tokens.slice(summaryOpenTokenIndex + 1, summaryCloseTokenIndex),
         filePath,
+        parentAlignment,
       ),
       properties: {},
     } satisfies DetailsSummaryToken);
     tokenStack.push({
       type: "content",
-      content: await stylize(tokens.slice(summaryCloseTokenIndex + 1), filePath),
+      content: await stylize(tokens.slice(summaryCloseTokenIndex + 1), filePath, parentAlignment),
       properties: {},
     } satisfies DetailsContentToken);
   } else {
@@ -543,7 +560,7 @@ async function details(tokens: Token[], filePath: string): Promise<ProcessedToke
     } satisfies DetailsSummaryToken);
     tokenStack.push({
       type: "content",
-      content: await stylize(tokens, filePath),
+      content: await stylize(tokens, filePath, parentAlignment),
       properties: {},
     } satisfies DetailsContentToken);
   }
@@ -565,19 +582,29 @@ const handleTokens: Handlers = {
     });
     return;
   },
-  paragraph: async (tokens: Token[], filePath: string) => await renderInline(tokens[0]!, filePath), // it's always just one inline token
+  paragraph: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await renderInline(tokens[0]!, filePath, parentAlignment), // it's always just one inline token
   table: async (tokens: Token[], filePath: string) => await table(tokens, filePath),
   heading: async (tokens: Token[], _, level?: number | 1) => heading(tokens[0]!, level),
-  div: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
-  blockquote: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
-  bullet_list: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
-  ordered_list: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
-  list_item: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
-  ruby: async (tokens: Token[], filePath: string) => await stylize(tokens, filePath),
+  div: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await stylize(tokens, filePath, parentAlignment),
+  blockquote: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await stylize(tokens, filePath, parentAlignment),
+  bullet_list: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await stylize(tokens, filePath, parentAlignment),
+  ordered_list: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await stylize(tokens, filePath, parentAlignment),
+  list_item: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await stylize(tokens, filePath, parentAlignment),
+  ruby: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await stylize(tokens, filePath, parentAlignment),
   // these ones recurse because they're container blocks
-  details: async (tokens: Token[], filePath: string) => await details(tokens, filePath),
-  rp: async (tokens: Token[], filePath: string) => await renderInline(tokens[0]!, filePath),
-  rt: async (tokens: Token[], filePath: string) => await renderInline(tokens[0]!, filePath),
+  details: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await details(tokens, filePath, parentAlignment),
+  rp: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await renderInline(tokens[0]!, filePath, parentAlignment),
+  rt: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
+    await renderInline(tokens[0]!, filePath, parentAlignment),
   pre: async (tokens: Token[]) => {
     let builtString = "";
     for (const token of tokens) {
@@ -655,7 +682,11 @@ function removeWhitespaceTokens<T extends ProcessedToken>(tokens: T[]): T[] {
     });
 }
 
-export default async function stylize(input: Token[], filePath: string): Promise<ProcessedToken[]> {
+export default async function stylize(
+  input: Token[],
+  filePath: string,
+  parentAlignment?: Alignment,
+): Promise<ProcessedToken[]> {
   // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
   let index = 0;
@@ -680,6 +711,7 @@ export default async function stylize(input: Token[], filePath: string): Promise
       }
     }
 
+    const alignment = getAlignment(token, parentAlignment);
     if (token.type === "alert_open") {
       const accumulatedTokens = [];
       while (input[index]?.type !== "alert_close") {
@@ -706,14 +738,21 @@ export default async function stylize(input: Token[], filePath: string): Promise
       state.push(tokenType);
       if (handler) {
         push.type = tokenType;
-        push.content =
-          tokenType === "heading"
-            ? ((await handler(
-              accumulatedTokens,
-              filePath,
-              parseInt(token.tag.split("")[1]!),
-            )) as HeadingObject)
-            : ((await handler(accumulatedTokens, filePath)) as ProcessedToken[]);
+        if (tokenType === "heading") {
+          push.content = (await handler(
+            accumulatedTokens,
+            filePath,
+            parseInt(token.tag.split("")[1]!),
+            alignment,
+          )) as HeadingObject;
+        } else {
+          push.content = (await handler(
+            accumulatedTokens,
+            filePath,
+            undefined,
+            alignment,
+          )) as ProcessedToken[];
+        }
         if (accumulatedTokenContentString.length > 0) {
           const unknownTagString: ProcessedToken = {
             type: "paragraph",
@@ -745,11 +784,10 @@ export default async function stylize(input: Token[], filePath: string): Promise
       state.pop();
     } else if (token.type === "inline") {
       push.type = "paragraph";
-      push.content = await renderInline(token);
+      push.content = await renderInline(token, filePath, alignment);
     } else {
       throw new Error(
-        "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function"
-        + "\n"
+        "Token type was not recognized: you might need to add handling for it in /src/stylize.js in the default `stylize()` function\n"
         + Chalk.dim(`PS: the token type was ${token.type}. Its index is ${index} `),
       );
     }

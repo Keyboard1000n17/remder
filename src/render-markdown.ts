@@ -191,6 +191,16 @@ export async function renderMarkdown(
           }),
         );
         break;
+      case "image":
+        const image = token.content;
+        const imageBox = new BoxRenderable(ctx, {});
+        imageBox.add(
+          noRenderImages
+            ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
+            : image.load(ctx, ctx.width - 2, false),
+        );
+        componentArray.push(imageBox);
+        break;
       case "paragraph": {
         const content = token.content;
         const tokenAlign = token.properties.align;
@@ -531,9 +541,10 @@ export async function renderMarkdown(
         const divBox = new BoxRenderable(ctx, {
           flexDirection: "column",
           width: "100%",
-          alignSelf: token.properties.align ?? "left",
-          alignItems: token.properties.align ?? "left",
+          alignSelf: token.properties.align || "left",
+          alignItems: token.properties.align || "left",
         });
+        console.log(`div align: ${token.properties.align || "left"}`);
         const divBoxRenderables = await renderMarkdown(
           token.content,
           ctx,

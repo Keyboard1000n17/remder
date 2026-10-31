@@ -74,6 +74,7 @@ export default class Image {
     public filePath: string,
     public imageAlt: string,
     public token: Token,
+    public parentAlignment?: "left" | "center" | "right",
   ) {
     this.imageBuffer = Image.getBuffer(filePath, path);
     this.type = "image";
@@ -282,7 +283,23 @@ export default class Image {
   load(ctx: RenderContext, parentWidth: number, makeOneRowHigh: boolean) {
     if (this.loadState === "loaded" || this.loadState === "loading") return;
     this.loadState = "loading";
-    const wrapper = new BoxRenderable(ctx, {});
+    const tokenAlignment = this.token.attrGet("align");
+    const alignment =
+      tokenAlignment === "left" || tokenAlignment === "center" || tokenAlignment === "right"
+        ? tokenAlignment
+        : this.parentAlignment;
+    logger.info(`token alignment for image is ${alignment}`);
+    const wrapper = new BoxRenderable(
+      ctx,
+      alignment
+        ? {
+          width: parentWidth,
+          flexDirection: "row",
+          justifyContent:
+            alignment === "left" ? "flex-start" : alignment === "right" ? "flex-end" : "center",
+        }
+        : {},
+    );
     const frames = Image.frames;
     const spinner = new TextRenderable(ctx, {
       content: `${frames[0]} Loading`,

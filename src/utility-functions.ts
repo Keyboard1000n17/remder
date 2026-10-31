@@ -27,18 +27,19 @@ export function alignText(
   termWidth: string,
 ): string {
   const width = parseInt(termWidth);
+  const wrappedText = Bun.wrapAnsi(text, parseInt(termWidth), { wordWrap: true, trim: false });
   if (align === "right") {
-    return text
+    return wrappedText
       .split("\n")
       .map((line) => " ".repeat(Math.floor(width - Bun.stringWidth(line))) + line)
       .join("\n");
   } else if (align === "center") {
-    return text
+    return wrappedText
       .split("\n")
       .map((line) => " ".repeat(Math.floor((width - Bun.stringWidth(line)) / 2)) + line)
       .join("\n");
   } else {
-    return text;
+    return wrappedText;
   }
 }
 

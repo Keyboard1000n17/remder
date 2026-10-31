@@ -75,7 +75,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: remder-*
+          pattern: remder-*
           path: dist
           merge-multiple: true
 

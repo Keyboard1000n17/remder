@@ -200,3 +200,10 @@ remder might be feature-rich, but there's always more to add! If you want to see
 find a bug, open a [Github issue](https://github.com/Keyboard1000n17/remder/issues) and we'll look
 into it. Do consider _adding the feature yourself_ – it saves us a lot of work and we'd be really
 grateful! Of course, if you find this repo useful, please shoot the repo a star!
+
+# License
+
+remder is licensed under the GNU General Public License v3. Any modifications to the source code
+must be distributed. You are free to fork, modify, and release the resulting program, with the only
+restriction being it must be licensed under the GNU GPL v3 or a compatible license. We love open
+source!

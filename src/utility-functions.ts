@@ -120,8 +120,8 @@ export async function makeFigletFont(
             .textSync(char, {
               font: fontsList[level],
             })
-            .trimEnd()
-            .replace(/^[^\S\r\n]*\r?\n/, ""),
+            .replace(/^[^\S\r\n]*\r?\n/, "")
+            .replace(/[^\S\r\n]*\r?\n$/, ""),
         }),
     );
     const box = new BoxRenderable(ctx, {

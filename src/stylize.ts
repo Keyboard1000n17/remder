@@ -257,6 +257,13 @@ const inline: Record<string, (text: string) => string> = {
 };
 
 async function renderInline(token: Token, filePath?: string, parentAlignment?: Alignment) {
+  const textAlignment = parentAlignment
+    ? {
+      left: "flex-start",
+      center: "center",
+      right: "flex-end",
+    }[parentAlignment]
+    : undefined;
   const styled: ProcessedToken[] = [];
   const tempChunks: TextChunk[] = [];
   if (token.type === "inline") {
@@ -331,7 +338,7 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
           styled.push({
             type: "text",
             content: new StyledText([...tempChunks]),
-            properties: {},
+            properties: textAlignment ? { textAlign: textAlignment } : {},
           } as ProcessedToken);
         }
         tempChunks.splice(0);
@@ -365,7 +372,7 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
     styled.push({
       type: "text",
       content: new StyledText([...tempChunks]),
-      properties: {},
+      properties: textAlignment ? { textAlign: textAlignment } : {},
     });
   }
   tempChunks.splice(0);
@@ -452,7 +459,6 @@ export async function table(tokens: Token[], filePath: string) {
   const tableRows: any[] = [];
   const currentRow: any[] = [];
   let currentAlign = "";
-
   // State & Parsing Handlers
   const handlers: Record<string, (t: Token, filePath: string) => void | Promise<void>> = {
     thead_open: (): void => {
@@ -492,10 +498,12 @@ export async function table(tokens: Token[], filePath: string) {
             : (alignMatch?.[1] ?? "flex-start");
     },
     inline: async (token: Token, filePath: string): Promise<void> => {
+      const align =
+        currentAlign === "flex-start" ? "left" : currentAlign === "flex-end" ? "right" : "center";
       currentRow.push({
         type: "table-cell",
-        content: await renderInline(token, filePath),
-        properties: { textAlign: currentAlign },
+        content: await renderInline(token, filePath, align),
+        properties: { textAlign: align },
       } as ProcessedToken);
     },
   };
@@ -584,7 +592,7 @@ const handleTokens: Handlers = {
   },
   paragraph: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
     await renderInline(tokens[0]!, filePath, parentAlignment), // it's always just one inline token
-  table: async (tokens: Token[], filePath: string) => await table(tokens, filePath),
+  table: async (tokens: Token[], filePath: string, _level) => await table(tokens, filePath),
   heading: async (tokens: Token[], _, level?: number | 1) => heading(tokens[0]!, level),
   div: async (tokens: Token[], filePath: string, _level, parentAlignment?: Alignment) =>
     await stylize(tokens, filePath, parentAlignment),

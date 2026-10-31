@@ -39,13 +39,6 @@ async function renderTable(
     throw new Error(
       `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
     );
-  console.log({
-    ctxWidth: ctx.width,
-    ctxHeight: ctx.height,
-    terminalWidth: ctx.terminalWidth,
-    terminalHeight: ctx.terminalHeight,
-    resolution: ctx.resolution,
-  });
   const table = new BoxRenderable(ctx, {
     width: "100%",
     maxWidth: ctx.width - 3,
@@ -135,6 +128,12 @@ async function renderTable(
           cellRenderable.add(
             new TextRenderable(ctx, {
               content: item.content,
+              textAlign:
+                cell.properties.textAlign === "flex-start"
+                  ? "left"
+                  : cell.properties.textAlign === "flex-end"
+                    ? "right"
+                    : "center",
             }),
           );
         } else if (item.type === "image") {
@@ -188,8 +187,10 @@ export async function renderMarkdown(
           new TextRenderable(ctx, {
             content,
             alignSelf: token.properties.align ?? "left",
+            textAlign: token.properties.align ?? "left",
           }),
         );
+        console.log(`textAlign: ${token.properties.align ?? "left"}`);
         break;
       case "image":
         const image = token.content;

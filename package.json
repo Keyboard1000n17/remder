@@ -1,5 +1,6 @@
 {
   "name": "remder",
+  "version": "1.0.0",
   "description": "Render your markdown with lots of bells and whistles!",
   "license": "GPL-3.0-or-later",
   "module": "index.js",

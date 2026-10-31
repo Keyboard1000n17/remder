@@ -2,9 +2,9 @@ param(
     [string]$Version = "latest"
 )
 
-$Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+$Arch = (Get-CimInstance Win32_OperatingSystem).OSArchitecture
 
-if ($Arch -ne "X64") {
+if ($Arch -ne "64-Bit") {
     throw "Unsupported Windows architecture: $Arch"
 }
 

@@ -27,7 +27,19 @@ remder is a feature-rich TUI (Terminal User Interface) for rendering markdown. I
 
 # Installation
 
-The package has not been published yet, please wait patiently!
+To install remder, use the appropiate install script.
+
+For Linux or macOS:
+
+```bash
+curl -fssL https://raw.githubusercontent.com/Keyboard1000n17/remder/refs/heads/master/install.sh | sh
+```
+
+For Windows (x86-64 only):
+
+```powershell
+irm https://raw.githubusercontent.com/Keyboard1000n17/remder/refs/heads/master/install.ps1 | iex
+```
 
 # Usage
 

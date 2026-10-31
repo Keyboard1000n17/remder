@@ -168,6 +168,7 @@ alias rmder "remder -i"
 ```
 
 ```powershell
+# powershell
 function rmder { remder -i }
 ```
 

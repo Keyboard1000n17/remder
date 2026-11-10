@@ -81,8 +81,7 @@ const htmlParser = new Parser({
       sanitizedText += `<${name}>`;
     } else {
       isPreviousTagDisallowed = false;
-      openingToken.type =
-        name === "img" ? "image" : `${aliases.get(name) ?? name}_open`;
+      openingToken.type = name === "img" ? "image" : `${aliases.get(name) ?? name}_open`;
       // set the attributes
       if (Object.keys(attributes).length > 0) {
         openingToken.attrs = [];
@@ -111,11 +110,7 @@ const htmlParser = new Parser({
     } else if (isPreviousTagDisallowed) {
       sanitizedText += `</${name}>`;
     } else {
-      const closingToken = new TokenClass(
-        `${aliases.get(name) ?? name}_close`,
-        name,
-        -1,
-      );
+      const closingToken = new TokenClass(`${aliases.get(name) ?? name}_close`, name, -1);
       closingToken.block = !inlineHtmlTags.has(name);
       htmlToTokens.push(closingToken);
     }
@@ -152,7 +147,7 @@ function convertHtmlToMarkdownItTokens(token: Token): Token[] {
 
 export default function parse(input: string) {
   const md = new MarkdownIt({
-    langPrefix: "langauge-",
+    langPrefix: "language-",
     html: true,
     linkify: true,
   })
@@ -189,21 +184,16 @@ export default function parse(input: string) {
         if (inlineTokenList.length > 0) {
           const inlineToken = new TokenClass("inline", "", 0);
           inlineToken.block = true;
-          const codeTokenIndex = inlineTokenList.findIndex(
-            (token) => token.type === "code_open",
-          );
+          const codeTokenIndex = inlineTokenList.findIndex((token) => token.type === "code_open");
           if (
             codeTokenIndex !== -1
             && inlineTokenList[codeTokenIndex + 1]?.type === "text"
             && inlineTokenList[codeTokenIndex + 2]?.type === "code_close"
           ) {
             const codeToken = new TokenClass("code_inline", "code", 0);
-            const codeTextToken: Token | undefined =
-              inlineTokenList[codeTokenIndex + 1];
+            const codeTextToken: Token | undefined = inlineTokenList[codeTokenIndex + 1];
             if (!codeTextToken) {
-              throw new Error(
-                chalk.red.bold(`Something went wrong, this shouldn't happen.`),
-              );
+              throw new Error(chalk.red.bold(`Something went wrong, this shouldn't happen.`));
             }
             codeToken.content = codeTextToken.content;
             codeToken.block = false;
@@ -211,8 +201,7 @@ export default function parse(input: string) {
           } // this ugly thing replaces a sequence of [code_open, text, code_close] with a single `code_inline element`
           inlineToken.children = inlineTokenList.splice(0); // this empties inlineTokenList
           const firstChild = inlineToken.children[0];
-          if (!firstChild)
-            throw new Error(`Something went wrong, this shouldn't happen.`);
+          if (!firstChild) throw new Error(`Something went wrong, this shouldn't happen.`);
           inlineToken.level = firstChild.level;
           finalProcessedTokens.push(inlineToken);
         }
@@ -227,8 +216,7 @@ export default function parse(input: string) {
       inlineToken.block = true;
       inlineToken.children = inlineTokenList.splice(0); // this empties inlineTokenList
       const firstChild = inlineToken.children[0];
-      if (!firstChild)
-        throw new Error(`Something went wrong, this isn't supposed to happen.`);
+      if (!firstChild) throw new Error(`Something went wrong, this isn't supposed to happen.`);
       inlineToken.level = firstChild.level;
       finalProcessedTokens.push(inlineToken);
     }

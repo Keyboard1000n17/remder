@@ -29,6 +29,15 @@ remder is a feature-rich TUI (Terminal User Interface) for rendering markdown. I
 
 To install remder, use the appropiate install script.
 
+### Homebrew
+
+If you have Homebrew, install remder by running:
+
+```bash
+brew tap keyboard1000n17/remder
+brew install keyboard1000n17/remder/remder
+```
+
 For Linux or macOS:
 
 ```bash
@@ -107,7 +116,7 @@ remder has several flags to modify the experience, listed here:
   remder -i
   ```
 
-- `--print-to-stdout` | `-p`
+- `--print-to-stdout` | `-o`
 
   If you want your styled text printed straight to the terminal, you have this option!
 

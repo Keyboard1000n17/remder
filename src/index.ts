@@ -377,22 +377,13 @@ homeRenderable.add(noFilesFoundText);
 root.add(homeRenderable);
 
 //#region file menu
-const optionsArray = [];
-for await (const file of glob("**/*.md", {})) {
-  let birthTime = "";
-  try {
-    birthTime = new Date((await stat(file)).birthtime).toDateString();
-  } catch (err) {
-    birthTime = "unknown";
-  }
-  optionsArray.push({
-    name: file,
-    description: `\tCreated at: ${birthTime}`,
-    value: file,
-  });
-}
+const optionsArray: {
+  name: string;
+  description: string;
+  value: string;
+}[] = [];
 const menu = new SelectRenderable(renderer, {
-  options: optionsArray,
+  options: [],
   width: "100%",
   flexGrow: 1,
   id: "menu",
@@ -402,6 +393,24 @@ const menu = new SelectRenderable(renderer, {
   focusedTextColor: RGBA.fromHex("#aaa"),
   textColor: RGBA.fromHex("#aaa"),
 });
+(async () => {
+  for await (const file of glob("**/*.md", {})) {
+    let birthTime = "";
+    try {
+      birthTime = new Date((await stat(file)).birthtime).toDateString();
+    } catch (err) {
+      birthTime = "unknown";
+    }
+    const option = {
+      name: file,
+      description: `\tCreated at: ${birthTime}`,
+      value: file,
+    };
+    menu.options.push(option);
+    optionsArray.push(option);
+    menu.requestRender();
+  }
+})();
 homeRenderable.add(menu);
 const fuzzysortSnapshot = fuzzysort.snapshot(optionsArray, { key: "value" });
 menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {

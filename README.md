@@ -38,6 +38,20 @@ brew tap keyboard1000n17/remder
 brew install keyboard1000n17/remder/remder
 ```
 
+### Arch (AUR)
+
+If you are on Arch Linux, install remder from the Arch User Repository (AUR).
+
+```bash
+yay -S remder-bin
+paru -S remder-bin
+```
+
+The package name is remder-bin. If you like this project, please vote for it on the
+[AUR](https://aur.archlinux.org/packages/remder-bin)!
+
+### Other (installation script)
+
 For Linux or macOS:
 
 ```bash

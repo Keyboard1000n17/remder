@@ -1,48 +1,7 @@
 const initTime = performance.now();
 
 //#region args
-import { parseArgs } from "node:util";
-
-const args = parseArgs({
-  options: {
-    noRenderImages: {
-      type: "boolean",
-      default: false,
-      short: "i",
-    },
-    noRenderHeadings: {
-      type: "boolean",
-      default: false,
-      short: "H",
-    },
-    width: {
-      type: "string",
-      default: process.stdout.columns?.toString() || "80",
-      short: "w",
-    },
-    height: {
-      type: "string",
-      default: process.stdout.rows?.toString() || "25",
-      short: "y",
-    },
-    printToStdout: {
-      type: "boolean",
-      default: false,
-      short: "o",
-    },
-    debug: {
-      type: "boolean",
-      default: false,
-      short: "d",
-    },
-    help: {
-      type: "boolean",
-      default: false,
-      short: "h",
-    },
-  },
-  allowPositionals: true,
-});
+import { finalOpts as args } from "./config";
 //#endregion
 
 //#region help

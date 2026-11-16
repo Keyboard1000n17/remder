@@ -48,6 +48,7 @@ const defaultArgs = {
   debug: false,
   noRenderImages: false,
   noRenderHeadings: false,
+  printToStdout: false,
   width: process.stdout.columns?.toString() || "80",
   height: process.stdout.rows?.toString() || "25",
 };
@@ -56,6 +57,7 @@ const filterOutUndefinedArgs: {
   debug?: boolean;
   noRenderImages?: boolean;
   noRenderHeadings?: boolean;
+  printToStdout?: boolean;
   width?: string;
   height?: string;
   help: boolean;
@@ -69,6 +71,7 @@ export const finalOpts: {
     debug: boolean;
     noRenderImages: boolean;
     noRenderHeadings: boolean;
+    printToStdout: boolean;
     width: string;
     height: string;
     help: boolean;
@@ -89,6 +92,7 @@ try {
     debug: "boolean",
     noRenderImages: "boolean",
     noRenderHeadings: "boolean",
+    printToStdout: "boolean",
     width: "string",
     height: "string",
   };

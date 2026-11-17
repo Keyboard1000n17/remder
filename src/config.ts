@@ -8,7 +8,7 @@ import { parseArgs } from "node:util";
 // Use ~/.config/ on all systems, including Windows
 // `~` resolves to `C:\Users\<user>\` on Windows
 const configDir = join(homedir(), ".config", "remder");
-const configFilePath = join(configDir, "config.yml");
+const configFilePath = join(configDir, "config.yaml");
 
 const args = parseArgs({
   options: {

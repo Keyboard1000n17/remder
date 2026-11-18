@@ -6,37 +6,38 @@ import { join } from "node:path";
 // These properties are common to Theme.foreground and Theme.background
 type CommonThemeParameters = {
   default: ColorInput;
-  link: ColorInput;
-  bottomBar: ColorInput;
-  bottomBarLeft: ColorInput;
-  toc: ColorInput;
-  codeBlockHeader: ColorInput;
-  inlineCode: ColorInput;
-  heading: {
-    h1: ColorInput;
-    h2: ColorInput;
-    h3: ColorInput;
-    h4: ColorInput;
-    h5: ColorInput;
-    h6: ColorInput;
+  link?: ColorInput;
+  bottomBar?: ColorInput;
+  bottomBarLeft?: ColorInput;
+  toc?: ColorInput;
+  codeBlockHeader?: ColorInput;
+  inlineCode?: ColorInput;
+  heading?: {
+    h1?: ColorInput;
+    h2?: ColorInput;
+    h3?: ColorInput;
+    h4?: ColorInput;
+    h5?: ColorInput;
+    h6?: ColorInput;
   };
 };
 
 type AlertTypes = {
-  note: ColorInput;
-  tip: ColorInput;
-  important: ColorInput;
-  warning: ColorInput;
-  caution: ColorInput;
+  note?: ColorInput;
+  tip?: ColorInput;
+  important?: ColorInput;
+  warning?: ColorInput;
+  caution?: ColorInput;
 };
 
 type Theme = {
-  foreground: CommonThemeParameters;
-  background: CommonThemeParameters & { codeBlock: ColorInput };
-  alerts: {
-    borderCharacter: string;
-    borderCharacterColor: AlertTypes;
-    text: AlertTypes;
+  name: string;
+  foreground?: CommonThemeParameters;
+  background?: CommonThemeParameters & { codeBlock?: ColorInput };
+  alerts?: {
+    borderCharacter?: string;
+    borderCharacterColor?: AlertTypes;
+    text?: AlertTypes;
   };
 };
 
@@ -69,7 +70,12 @@ function validateHeadingEntry(val: unknown): string[] {
   return errors;
 }
 
-function validateCommonThemeParameters(val: unknown): asserts val is CommonThemeParameters {
+type CombinedCommonThemeParameters = CommonThemeParameters & { codeBlock: ColorInput };
+
+function validateCommonThemeParameters(
+  val: unknown,
+  isBg: boolean,
+): asserts val is CombinedCommonThemeParameters {
   const errors = [];
   const commonThemeParamsKeys = [
     "default",
@@ -80,7 +86,8 @@ function validateCommonThemeParameters(val: unknown): asserts val is CommonTheme
     "codeBlockHeader",
     "inlineCode",
     "heading",
-  ] as const satisfies (keyof CommonThemeParameters)[];
+    ...(isBg ? (["codeBlock"] as const satisfies (keyof CombinedCommonThemeParameters)[]) : []),
+  ] as const satisfies (keyof CombinedCommonThemeParameters)[];
   if (!val) {
     throw new Error(`foreground or background is null`);
   }
@@ -128,8 +135,15 @@ function validateAlerts(val: unknown): asserts val is AlertTypes {
 function isTheme(val: unknown): asserts val is Theme {
   const themeKeys = ["foreground", "background", "alerts"] as const satisfies (keyof Theme)[];
   const mapKeyToFunction = {
-    foreground: validateCommonThemeParameters,
-    background: validateCommonThemeParameters,
+    name: (val: unknown) => {
+      return typeof val === "string";
+    },
+    foreground: (val: unknown) => {
+      validateCommonThemeParameters(val, false);
+    },
+    background: (val: unknown) => {
+      validateCommonThemeParameters(val, true);
+    },
     alerts: validateAlerts,
   };
   if (!val) {
@@ -167,3 +181,41 @@ const themeFiles = await Array.fromAsync(
     absolute: true,
   }),
 );
+const themes: Theme[] = [
+  {
+    name: "Default dark",
+    foreground: {
+      default: "#fff",
+      link: "#8af",
+      inlineCode: "#fff",
+      toc: "#fff",
+      heading: {
+        h1: "#ffa50a",
+        h2: "#eeee00",
+        h3: "#0acadd",
+        h4: "#ffa5a5",
+        h5: "#22ff22",
+        h6: "#aaaaaa",
+      },
+    },
+    background: {
+      default: "transparent",
+      codeBlock: "#222",
+      inlineCode: "#222",
+      bottomBar: "#282828",
+      bottomBarLeft: "#089916",
+    },
+    alerts: {
+      borderCharacter: "\u258c", // displays as ▌
+      borderCharacterColor: {
+        note: "#6af",
+        tip: "#3b4",
+        important: "#96f",
+        warning: "#dd4",
+        caution: "#f44",
+      },
+    },
+  },
+];
+for (const theme of themeFiles) {
+}

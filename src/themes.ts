@@ -2,6 +2,7 @@ import { type ColorInput } from "@opentui/core";
 import { Glob } from "bun";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { merge } from "./merge.js";
 
 // These properties are common to Theme.foreground and Theme.background
 type CommonThemeParameters = {
@@ -32,6 +33,7 @@ type AlertTypes = {
 
 type Theme = {
   name: string;
+  type: "light" | "dark";
   foreground?: CommonThemeParameters;
   background?: CommonThemeParameters & { codeBlock?: ColorInput };
   alerts?: {
@@ -133,10 +135,19 @@ function validateAlerts(val: unknown): asserts val is AlertTypes {
 }
 
 function isTheme(val: unknown): asserts val is Theme {
-  const themeKeys = ["foreground", "background", "alerts"] as const satisfies (keyof Theme)[];
+  const themeKeys = [
+    "name",
+    "type",
+    "foreground",
+    "background",
+    "alerts",
+  ] as const satisfies (keyof Theme)[];
   const mapKeyToFunction = {
     name: (val: unknown) => {
-      return typeof val === "string";
+      return typeof val === "string" && val !== "Default Light" && val !== "Default Dark";
+    },
+    type: (val: unknown) => {
+      return val === "left" || val === "right";
     },
     foreground: (val: unknown) => {
       validateCommonThemeParameters(val, false);
@@ -173,6 +184,41 @@ function isTheme(val: unknown): asserts val is Theme {
   }
 }
 
+function fillDefaults(theme: Theme, fallback?: ColorInput) {
+  const commonKeys = [
+    "link",
+    "bottomBar",
+    "bottomBarLeft",
+    "toc",
+    "codeBlockHeader",
+    "inlineCode",
+    "heading",
+  ] as const satisfies (keyof CommonThemeParameters)[];
+  if (theme.foreground) {
+    const fg = theme.foreground;
+    const defaultValue = fg.default ?? fallback;
+    for (const key of commonKeys) {
+      if (!fg[key]) {
+        fg[key] = defaultValue;
+      }
+    }
+  }
+  if (theme.background) {
+    const bg = theme.background;
+    const defaultValue = bg.default ?? fallback;
+    for (const key of [
+      ...commonKeys,
+      "codeBlock",
+    ] as const satisfies (keyof CombinedCommonThemeParameters)[]) {
+      if (!bg[key]) {
+        bg[key] = defaultValue;
+        continue;
+      }
+    }
+  }
+  return theme;
+}
+
 const themeFilesDir = join(homedir(), ".config", "remder", "themes");
 const themeFiles = await Array.fromAsync(
   new Glob("*.yaml").scan({
@@ -181,9 +227,10 @@ const themeFiles = await Array.fromAsync(
     absolute: true,
   }),
 );
-const themes: Theme[] = [
-  {
-    name: "Default dark",
+export const themes: Record<string, Theme> = {
+  "Default Dark": {
+    name: "Default Dark",
+    type: "dark",
     foreground: {
       default: "#fff",
       link: "#8af",
@@ -216,6 +263,53 @@ const themes: Theme[] = [
       },
     },
   },
-];
+  "Default Light": {
+    name: "Default Light",
+    type: "light",
+    foreground: {
+      default: "#000",
+      link: "#027",
+      inlineCode: "#000",
+      toc: "#000",
+      heading: {
+        h1: "#996100",
+        h2: "#666600",
+        h3: "#045962",
+        h4: "#cc1f4f",
+        h5: "#006600",
+        h6: "#333333",
+      },
+    },
+    background: {
+      default: "transparent",
+      codeBlock: "#ddd",
+      inlineCode: "#ddd",
+      bottomBar: "#d7d7d7",
+      bottomBarLeft: "#66f774",
+    },
+    alerts: {
+      borderCharacter: "\u258c",
+      borderCharacterColor: {
+        note: "#6af",
+        tip: "#3b4",
+        important: "#96f",
+        warning: "#dd4",
+        caution: "#f44",
+      },
+    },
+  },
+};
 for (const theme of themeFiles) {
+  try {
+    const file = await Bun.file(theme).text();
+    const parsedYaml = Bun.YAML.parse(file);
+    isTheme(parsedYaml);
+    const filledDefaults = fillDefaults(parsedYaml);
+    const mergeWith =
+      filledDefaults.type === "dark" ? themes["Default Dark"]! : themes["Default Light"]!;
+    const merged = merge(mergeWith, filledDefaults);
+    Object.defineProperty(themes, merged.name, merged);
+  } catch (e) {
+    console.error(e);
+  }
 }

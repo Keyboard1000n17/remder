@@ -44,9 +44,17 @@ If you are on Arch Linux, install remder from the Arch User Repository (AUR).
 
 ```bash
 yay -S remder-bin
-paru -S remder-bin
+```
+You can also use any other AUR helper, by installing `remder-bin` package. 
+
+You can also do it manually, by:
+```
+git clone https://aur.archlinux.org/remder-bin.git
+cd remder-bin
+makepkg -sif
 ```
 
+git clone 
 The package name is remder-bin. If you like this project, please vote for it on the
 [AUR](https://aur.archlinux.org/packages/remder-bin)!
 

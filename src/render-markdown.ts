@@ -10,15 +10,25 @@ import {
   KeyEvent,
   RenderableEvents,
   type BorderSides,
+  parseColor,
 } from "@opentui/core";
 import chalk from "chalk";
 import type { ProcessedToken, HeadingObject } from "./stylize";
+import { finalOpts as args } from "./config.js";
+import { themes, type DeepRequired, type Theme } from "./themes.js";
 import {
   ansiToTextToken,
   makeFigletFont,
   makeTaskList,
   ansiToTextChunks,
 } from "./utility-functions";
+
+const selectedTheme: DeepRequired<Theme> | undefined = themes[args.values.theme];
+if (!selectedTheme) {
+  throw new Error("Error while attempting to use theme");
+}
+
+const theme = selectedTheme;
 
 const headingIndexes = [0, 0, 0, 0, 0, 0];
 export const headingsArrayForToc: {
@@ -30,11 +40,7 @@ export const headingsArrayForToc: {
 
 export const detailsElementsArray: Renderable[] = [];
 
-async function renderTable(
-  ctx: RenderContext,
-  tableToken: ProcessedToken,
-  noRenderImages: boolean,
-) {
+async function renderTable(ctx: RenderContext, tableToken: ProcessedToken) {
   if (tableToken.type !== "table")
     throw new Error(
       `Table token type is somehow ${typeof tableToken.content} instead of an array!`,
@@ -81,9 +87,8 @@ async function renderTable(
     cellWidth,
   });
   for (let rowIndex = 0; rowIndex < tableToken.content.length; rowIndex++) {
-    // this style of loop is used over `for (const row of tableToken.content)`
+    // Reminder to self: This style of loop is used over `for (const row of tableToken.content)`
     // because rowIndex is used repeatedly and this is much more convenient
-    // and i don't have to figure out anything
     const row = tableToken.content[rowIndex]!;
     const isFirstRow = rowIndex === 0;
     const isLastRow = rowIndex === tableToken.content.length - 1;
@@ -137,7 +142,7 @@ async function renderTable(
             }),
           );
         } else if (item.type === "image") {
-          if (noRenderImages) {
+          if (args.values.noRenderImages) {
             cellRenderable.add(
               new TextRenderable(ctx, {
                 content: item.content.imageAlt,
@@ -171,8 +176,6 @@ export async function renderMarkdown(
   tokens: ProcessedToken[],
   ctx: RenderContext,
   languageToNerdFontIconMap: { default: string;[value: string]: string },
-  noRenderHeadings: boolean,
-  noRenderImages: boolean,
   width: string,
 ) {
   const componentArray: Renderable[] = [];
@@ -196,7 +199,7 @@ export async function renderMarkdown(
         const image = token.content;
         const imageBox = new BoxRenderable(ctx, {});
         imageBox.add(
-          noRenderImages
+          args.values.noRenderImages
             ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
             : image.load(ctx, ctx.width - 2, false),
         );
@@ -226,7 +229,7 @@ export async function renderMarkdown(
           if (element.type === "image") {
             const image = element.content;
             paragraphBox.add(
-              noRenderImages
+              args.values.noRenderImages
                 ? ansiToTextToken(chalk.gray(image.imageAlt), ctx)
                 : image.load(
                   ctx,
@@ -244,23 +247,22 @@ export async function renderMarkdown(
       //#endregion
       //#region headings
       case "heading":
-        if (typeof token.content === "string") throw new Error("What?");
-        const tokenContent: HeadingObject = token.content as HeadingObject;
-
-        if (noRenderHeadings) {
+        const tokenContent: HeadingObject = token.content;
+        if (args.values.noRenderHeadings) {
+          const headingColors = theme.foreground.heading;
           const colorMap: Record<number, (str: string) => StyledText> = {
             1: (str: string) =>
-              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#ffa50a") }]),
+              new StyledText([{ __isChunk: true, text: str, fg: parseColor(headingColors.h1) }]),
             2: (str: string) =>
-              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#eeee00") }]),
+              new StyledText([{ __isChunk: true, text: str, fg: parseColor(headingColors.h2) }]),
             3: (str: string) =>
-              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#0acadd") }]),
+              new StyledText([{ __isChunk: true, text: str, fg: parseColor(headingColors.h3) }]),
             4: (str: string) =>
-              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#ffa5a5") }]),
+              new StyledText([{ __isChunk: true, text: str, fg: parseColor(headingColors.h4) }]),
             5: (str: string) =>
-              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#22ff22") }]),
+              new StyledText([{ __isChunk: true, text: str, fg: parseColor(headingColors.h5) }]),
             6: (str: string) =>
-              new StyledText([{ __isChunk: true, text: str, fg: RGBA.fromHex("#aaaaaa") }]),
+              new StyledText([{ __isChunk: true, text: str, fg: parseColor(headingColors.h6) }]),
           };
           const str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
@@ -332,7 +334,7 @@ export async function renderMarkdown(
       //#endregion
       //#region table
       case "table":
-        componentArray.push(await renderTable(ctx, token, noRenderImages));
+        componentArray.push(await renderTable(ctx, token));
         break;
       //#endregion
       //#region bullet list
@@ -348,8 +350,6 @@ export async function renderMarkdown(
             listContent,
             ctx,
             languageToNerdFontIconMap,
-            noRenderHeadings,
-            noRenderImages,
             width,
           );
           listRenderables.forEach((listRenderable, index) => {
@@ -386,8 +386,6 @@ export async function renderMarkdown(
             listContent,
             ctx,
             languageToNerdFontIconMap,
-            noRenderHeadings,
-            noRenderImages,
             width,
           );
           const markerWidth = listRenderables.length + initialNumber - 1;
@@ -421,8 +419,6 @@ export async function renderMarkdown(
           token.content,
           ctx,
           languageToNerdFontIconMap,
-          noRenderHeadings,
-          noRenderImages,
           width,
         );
         blockquoteRenderables.forEach((renderable) =>
@@ -454,14 +450,15 @@ export async function renderMarkdown(
       //#endregion
       //#region alerts
       case "alert": {
+        const alerts = theme.alerts.borderCharacterColor;
         const alertIcons: Record<string, { icon: string; color: string; name: string }> = {
-          note: { icon: "\uf129", color: "#6af", name: "Note" },
-          tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
-          important: { icon: "\uf12a", color: "#96f", name: "Important" },
-          warning: { icon: "\uea6c", color: "#dd4", name: "Warning" },
-          caution: { icon: "\u{f0ce6}", color: "#f44", name: "Caution" },
+          note: { icon: "\uf129", color: alerts.note, name: "Note" },
+          tip: { icon: "\uf400", color: alerts.tip, name: "Tip" },
+          important: { icon: "\uf12a", color: alerts.important, name: "Important" },
+          warning: { icon: "\uea6c", color: alerts.warning, name: "Warning" },
+          caution: { icon: "\u{f0ce6}", color: alerts.caution, name: "Caution" },
         };
-        const uhb = "\u258c"; // unicode left half block
+        const uhb = theme.alerts.borderCharacter;
         const alertType = token.properties.alertType;
         const alertIconAndColor = alertIcons[alertType];
         const alertBox = new BoxRenderable(ctx, {
@@ -481,7 +478,7 @@ export async function renderMarkdown(
             cross: uhb,
           },
           rowGap: 1,
-          borderColor: RGBA.fromHex(alertIconAndColor?.color || ""),
+          borderColor: parseColor(alertIconAndColor?.color || ""),
         });
         alertBox.add(
           Text({
@@ -489,16 +486,9 @@ export async function renderMarkdown(
             fg: RGBA.fromHex(alertIconAndColor?.color || ""),
           }),
         );
-        (
-          await renderMarkdown(
-            token.content,
-            ctx,
-            languageToNerdFontIconMap,
-            noRenderHeadings,
-            noRenderImages,
-            width,
-          )
-        ).forEach((renderable) => alertBox.add(renderable));
+        (await renderMarkdown(token.content, ctx, languageToNerdFontIconMap, width)).forEach(
+          (renderable) => alertBox.add(renderable),
+        );
         componentArray.push(alertBox);
         break;
       }
@@ -517,7 +507,7 @@ export async function renderMarkdown(
           paddingTop: 1,
           marginLeft: 1,
           rowGap: 1,
-          backgroundColor: "#222",
+          backgroundColor: theme.background.codeBlock,
           width: "auto",
           minWidth: 40,
           flexShrink: 0,
@@ -525,8 +515,9 @@ export async function renderMarkdown(
           alignSelf: "flex-start",
         });
         box.add(
-          Text({
+          new TextRenderable(ctx, {
             content: `${icon} ${language}`,
+            fg: theme.foreground.codeBlockHeader,
           }),
         );
         box.add(
@@ -550,8 +541,6 @@ export async function renderMarkdown(
           token.content,
           ctx,
           languageToNerdFontIconMap,
-          noRenderHeadings,
-          noRenderImages,
           width,
         );
         divBoxRenderables.forEach((renderable) => divBox.add(renderable));
@@ -567,14 +556,7 @@ export async function renderMarkdown(
         const summaryText = new BoxRenderable(ctx, {});
         if (summaryToken)
           (
-            await renderMarkdown(
-              summaryToken.content,
-              ctx,
-              languageToNerdFontIconMap,
-              noRenderHeadings,
-              noRenderImages,
-              width,
-            )
+            await renderMarkdown(summaryToken.content, ctx, languageToNerdFontIconMap, width)
           ).forEach((renderable) => summaryText.add(renderable));
         const detailsBox = Box({
           id: `details-element-${detailsId}`,
@@ -588,19 +570,17 @@ export async function renderMarkdown(
             detailsContent.find((t) => t.type === "content")!.content,
             ctx,
             languageToNerdFontIconMap,
-            noRenderHeadings,
-            noRenderImages,
             width,
           )
         ).forEach((renderable) => detailsBox.add(renderable)); // the content of the details element
         const openIndicator = Text({
-          content: "⏵",
-          visible: isOpen ? false : true,
+          content: "⏷",
+          visible: isOpen ? true : false,
           id: `closed-indicator-${detailsId}`,
         });
         const closedIndicator = Text({
-          content: "⏷",
-          visible: isOpen ? true : false,
+          content: "⏵",
+          visible: isOpen ? false : true,
           id: `open-indicator-${detailsId}`,
         });
         const indicators = Box(

@@ -20,6 +20,10 @@ const args = parseArgs({
       type: "boolean",
       short: "H",
     },
+    theme: {
+      type: "string",
+      short: "T",
+    },
     width: {
       type: "string",
       short: "w",
@@ -49,6 +53,7 @@ const defaultArgs = {
   noRenderImages: false,
   noRenderHeadings: false,
   printToStdout: false,
+  theme: "Dark",
   width: process.stdout.columns?.toString() || "80",
   height: process.stdout.rows?.toString() || "25",
 };
@@ -57,6 +62,7 @@ const filterOutUndefinedArgs: {
   debug?: boolean;
   noRenderImages?: boolean;
   noRenderHeadings?: boolean;
+  theme?: string;
   printToStdout?: boolean;
   width?: string;
   height?: string;
@@ -71,6 +77,7 @@ export const finalOpts: {
     debug: boolean;
     noRenderImages: boolean;
     noRenderHeadings: boolean;
+    theme: string;
     printToStdout: boolean;
     width: string;
     height: string;
@@ -92,6 +99,7 @@ try {
     debug: "boolean",
     noRenderImages: "boolean",
     noRenderHeadings: "boolean",
+    theme: "string",
     printToStdout: "boolean",
     width: "string",
     height: "string",
@@ -100,7 +108,7 @@ try {
     // This serves to check if the key exists and the value is the specified type
     const mapKey = optsAndValuesMap[key];
     if (!mapKey) {
-      errorList.push(`${mapKey} is not an option`);
+      errorList.push(`${key} is not an option`);
     } else if (typeof value !== mapKey) {
       errorList.push(`${key} should be of the type "${mapKey}"`);
     }
@@ -115,6 +123,10 @@ try {
     ...filterOutUndefinedArgs,
   };
 } catch (err) {
+  finalOpts.values = {
+    ...defaultArgs,
+    ...filterOutUndefinedArgs,
+  };
   if (!(err instanceof Error && "code" in err && err.code === "ENOENT")) {
     console.error(err);
   }

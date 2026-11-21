@@ -1,8 +1,6 @@
 const initTime = performance.now();
 
-//#region args
 import { finalOpts as args } from "./config";
-//#endregion
 
 //#region help
 if (args.values.help) {
@@ -207,6 +205,7 @@ import {
   type SelectOption,
   InputRenderable,
   InputRenderableEvents,
+  parseColor,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import fuzzysort from "fuzzysort";
@@ -222,29 +221,35 @@ import {
 import parseInput from "./parse-input.js";
 import stylize from "./stylize.js";
 import got from "got";
+import { themes } from "./themes.js";
 import { feature } from "bun:bundle";
 //#endregion
+
+const theme = themes[args.values.theme];
+if (!theme) {
+  throw new Error("Error while attempting to use theme");
+}
 
 let headingIndexForToc = 0;
 let detailsElementsIndex: number | null = null;
 
 //#region handle stdin
 /*
- *  NOTE: chatgpt generated this part of the code, i can not be bothered to deal
+ *  NOTE: Chatgpt generated this part of the code, I can not be bothered to deal
  * with a bug in bun that has a pr waiting since june 12 2026
  * (oven-sh/bun#32153) (https://github.com/oven-sh/bun/pull/32153).
  *
- * what this code does is it checks if stdin is a tty. if stdin is a tty at the
- * time of checking, the opentui renderer takes the normal stdin as input. but if
- * it isn't a tty, that means that some input is being piped into the program. in
+ * What this code does is it checks if stdin is a TTY. If stdin is a TTY at the
+ * time of checking, the OpenTUI renderer takes the normal stdin as input. But if
+ * it isn't a TTY, that means that some input is being piped into the program. in
  * that case, two things can happen:
- * 1. if the os is windows, then we import the ffi module to open a new input stream
- *    that bun will consider a tty
- * 2. if the os is not windows, we assume it is a sort of unix implementation and open
+ * 1. If the OS is Windows, then we import the FFI module to open a new input stream
+ *    that bun will consider a TTY
+ * 2. If the OS is not Windows, we assume it is a sort of Unix implementation and open
  *    an input stream on /dev/tty/
  *
- * the rest of the comments in this block are from chatgpt, and i wrote this comment
- * so i don't forget what it does.
+ * The rest of the comments in this block are from ChatGPT, and i wrote this comment
+ * so I don't forget what it does.
  * */
 
 const stdinWasTTY = process.stdin.isTTY;
@@ -393,14 +398,7 @@ menu.on(SelectRenderableEvents.ITEM_SELECTED, async (_, opt: SelectOption) => {
     const content = await Bun.file(opt.value).text();
     const rendered = await stylize(parseInput(content), opt.value);
     (
-      await renderMarkdown(
-        rendered,
-        renderer,
-        languageToNerdFontIconMap,
-        args.values.noRenderHeadings,
-        args.values.noRenderImages,
-        args.values.width,
-      )
+      await renderMarkdown(rendered, renderer, languageToNerdFontIconMap, args.values.width)
     ).forEach((renderable) => contentScrollBox.add(renderable));
     if (tocBox) {
       root.remove(tocBox);
@@ -443,8 +441,8 @@ const contentScrollBox = new ScrollBoxRenderable(renderer, contentScrollBoxOpts)
 
 const searchBox = new InputRenderable(renderer, {
   flexGrow: 1,
-  backgroundColor: "transparent",
-  textColor: RGBA.fromHex("#fff"),
+  backgroundColor: parseColor(theme.background.bottomBar),
+  textColor: parseColor(theme.foreground.default),
 });
 
 const searchRow = new BoxRenderable(renderer, {
@@ -453,12 +451,14 @@ const searchRow = new BoxRenderable(renderer, {
   bottom: 0,
   left: 0,
   width: "100%",
-  backgroundColor: "#888",
+  backgroundColor: parseColor(theme.background.bottomBar),
   flexDirection: "row",
 });
 searchRow.add(
   new TextRenderable(renderer, {
-    content: new StyledText([{ __isChunk: true, text: "/", fg: RGBA.fromHex("#fff") }]),
+    content: new StyledText([
+      { __isChunk: true, text: "/", fg: parseColor(theme.foreground.default) },
+    ]),
   }),
 );
 searchRow.add(searchBox);
@@ -766,8 +766,6 @@ if (args.positionals.length > 0) {
     tokens,
     renderer,
     languageToNerdFontIconMap,
-    args.values.noRenderHeadings,
-    args.values.noRenderImages,
     args.values.width,
   );
   renderables.forEach((renderable) => {
@@ -790,8 +788,6 @@ if (args.positionals.length > 0) {
       tokens,
       renderer,
       languageToNerdFontIconMap,
-      args.values.noRenderHeadings,
-      args.values.noRenderImages,
       args.values.width,
     );
     renderables.forEach((renderable) => contentScrollBox.add(renderable));
@@ -814,7 +810,7 @@ const bottomBarOpts: BoxOptions<BoxRenderable> = {
   position: "absolute",
   bottom: 0,
   left: 0,
-  backgroundColor: "#282828",
+  backgroundColor: parseColor(theme.background.bottomBar),
   id: "bottomBar",
 };
 const bottomBar = new BoxRenderable(renderer, bottomBarOpts);
@@ -823,7 +819,7 @@ bottomBar.add(
     {
       paddingLeft: 1,
       paddingRight: 1,
-      backgroundColor: RGBA.fromHex("#089916"),
+      backgroundColor: parseColor(theme.background.bottomBarLeft),
       columnGap: 1,
     },
     Text({
@@ -895,7 +891,7 @@ const helpMenuBox = new BoxRenderable(renderer, {
   title: "Help",
   titleAlignment: "center",
   titleColor: "white",
-  backgroundColor: RGBA.fromHex("#282828"),
+  backgroundColor: parseColor(theme.background.bottomBar),
   borderColor: RGBA.fromHex("#444444"),
   id: "helpMenu",
   visible: false,
@@ -916,7 +912,7 @@ for (const section of helpSections) {
     Text({
       content: section.title,
       height: 1,
-      fg: RGBA.fromHex("#089916"),
+      fg: theme.background.bottomBarLeft,
       attributes: createTextAttributes({ bold: true }),
     }),
   );
@@ -931,7 +927,7 @@ for (const section of helpSections) {
         content: shortcut.key,
         width: 12,
         height: 1,
-        fg: RGBA.fromHex("#ffffff"),
+        fg: parseColor(theme.foreground.default),
       }),
     );
     row.add(

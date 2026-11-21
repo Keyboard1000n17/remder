@@ -1,4 +1,4 @@
-import { type ColorInput } from "@opentui/core";
+import { RGBA, type ColorInput } from "@opentui/core";
 import { Glob } from "bun";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -6,48 +6,42 @@ import { merge } from "./merge.js";
 
 // These properties are common to Theme.foreground and Theme.background
 type CommonThemeParameters = {
-  default: ColorInput;
-  link?: ColorInput;
-  bottomBar?: ColorInput;
-  bottomBarLeft?: ColorInput;
-  toc?: ColorInput;
-  codeBlockHeader?: ColorInput;
-  inlineCode?: ColorInput;
+  default: string;
+  link?: string;
+  bottomBar?: string;
+  bottomBarLeft?: string;
+  toc?: string;
+  codeBlockHeader?: string;
+  inlineCode?: string;
   heading?: {
-    h1?: ColorInput;
-    h2?: ColorInput;
-    h3?: ColorInput;
-    h4?: ColorInput;
-    h5?: ColorInput;
-    h6?: ColorInput;
+    h1?: string;
+    h2?: string;
+    h3?: string;
+    h4?: string;
+    h5?: string;
+    h6?: string;
   };
 };
 
 type AlertTypes = {
-  note?: ColorInput;
-  tip?: ColorInput;
-  important?: ColorInput;
-  warning?: ColorInput;
-  caution?: ColorInput;
+  note?: string;
+  tip?: string;
+  important?: string;
+  warning?: string;
+  caution?: string;
 };
 
-type Theme = {
+export type Theme = {
   name: string;
   type: "light" | "dark";
   foreground?: CommonThemeParameters;
-  background?: CommonThemeParameters & { codeBlock?: ColorInput };
+  background?: CommonThemeParameters & { codeBlock?: string };
   alerts?: {
     borderCharacter?: string;
     borderCharacterColor?: AlertTypes;
     text?: AlertTypes;
   };
 };
-
-function isColorInput(val: ColorInput): val is ColorInput {
-  const isString = typeof val === "string";
-  const isRGBA = typeof val === "object" && val !== null && "r" in val && "g" in val && "b" in val;
-  return isString || isRGBA;
-}
 
 function validateHeadingEntry(val: unknown): string[] {
   const errors = [];
@@ -61,11 +55,11 @@ function validateHeadingEntry(val: unknown): string[] {
     return errors;
   }
   for (const [key, value] of Object.entries(val)) {
-    if (!(key in headingKeys)) {
+    if (!headingKeys.includes(key)) {
       errors.push(
         `${key} is not a valid key. Heading keys must be one of h1, h2, h3, h4, h5. or h6.`,
       );
-    } else if (!isColorInput(value)) {
+    } else if (typeof value !== "string") {
       errors.push(`${value} is an invalid value for heading.${key}`);
     }
   }
@@ -97,9 +91,9 @@ function validateCommonThemeParameters(
     throw new Error("Configuration must be key-value pairs at all levels, did you use a list?");
   }
   for (const [key, value] of Object.entries(val)) {
-    if (!(key in commonThemeParamsKeys)) {
+    if (!(commonThemeParamsKeys as string[]).includes(key)) {
       errors.push(`${key} is not a valid key.`);
-    } else if (!isColorInput(value)) {
+    } else if (key !== "heading" && typeof value !== "string") {
       errors.push(`${value} is an invalid value for ${key}`);
     }
     if (key === "heading") {
@@ -126,9 +120,9 @@ function validateAlerts(val: unknown): asserts val is AlertTypes {
     throw new Error("Configuration must be key-value pairs at all levels, did you use a list?");
   }
   for (const [key, value] of Object.entries(val)) {
-    if (!(key in alertKeys)) {
+    if (!(alertKeys as string[]).includes(key)) {
       throw new Error(`${key} is not a valid key.`);
-    } else if (!isColorInput(value)) {
+    } else if (typeof value !== "string") {
       throw new Error(`${value} is an invalid value for ${key}`);
     }
   }
@@ -141,7 +135,7 @@ function isTheme(val: unknown): asserts val is Theme {
     "foreground",
     "background",
     "alerts",
-  ] as const satisfies (keyof Theme)[];
+  ] satisfies (keyof Theme)[];
   const mapKeyToFunction = {
     name: (val: unknown) => {
       return typeof val === "string" && val !== "Default Light" && val !== "Default Dark";
@@ -157,6 +151,13 @@ function isTheme(val: unknown): asserts val is Theme {
     },
     alerts: validateAlerts,
   };
+  const mapKeyToValueType: Record<keyof Theme, "string" | "object"> = {
+    name: "string",
+    type: "string",
+    foreground: "object",
+    background: "object",
+    alerts: "object",
+  };
   if (!val) {
     throw new Error(`Configuration must not be null`);
   }
@@ -164,13 +165,13 @@ function isTheme(val: unknown): asserts val is Theme {
     throw new Error("Configuration must be key-value pairs at all levels, did you use a list?");
   }
   for (const [key, value] of Object.entries(val)) {
-    if (!(key in themeKeys)) {
+    if (!(themeKeys as string[]).includes(key)) {
       throw new Error(`${key} is not a valid key.`);
     }
-    if (value === null) {
-      throw new Error(`Value of ${key} must not be null`);
+    if (!value) {
+      throw new Error(`Value of ${key} must not be null or undefined`);
     }
-    if (typeof value !== "object") {
+    if (typeof value !== mapKeyToValueType[key as keyof Theme]) {
       throw new Error(
         `Configuration must be key-value pairs at all levels, did you use a list for ${key}?`,
       );
@@ -184,7 +185,7 @@ function isTheme(val: unknown): asserts val is Theme {
   }
 }
 
-function fillDefaults(theme: Theme, fallback?: ColorInput) {
+function fillDefaults(theme: Theme, fallback?: ColorInput): DeepRequired<Theme> {
   const commonKeys = [
     "link",
     "bottomBar",
@@ -194,10 +195,32 @@ function fillDefaults(theme: Theme, fallback?: ColorInput) {
     "inlineCode",
     "heading",
   ] as const satisfies (keyof CommonThemeParameters)[];
+  const headingKeys = ["h1", "h2", "h3", "h4", "h5", "h6"];
   if (theme.foreground) {
     const fg = theme.foreground;
     const defaultValue = fg.default ?? fallback;
     for (const key of commonKeys) {
+      if (key === "heading") {
+        if (fg.heading) {
+          const heading = fg.heading;
+          const headingColor = heading.h1 ?? defaultValue;
+          for (const h of headingKeys) {
+            if (!Object.hasOwn(heading, h)) {
+              Object.defineProperty(heading, h, headingColor);
+            }
+          }
+        } else {
+          fg.heading = {
+            h1: defaultValue,
+            h2: defaultValue,
+            h3: defaultValue,
+            h4: defaultValue,
+            h5: defaultValue,
+            h6: defaultValue,
+          };
+        }
+        continue;
+      }
       if (!fg[key]) {
         fg[key] = defaultValue;
       }
@@ -210,26 +233,47 @@ function fillDefaults(theme: Theme, fallback?: ColorInput) {
       ...commonKeys,
       "codeBlock",
     ] as const satisfies (keyof CombinedCommonThemeParameters)[]) {
+      if (key === "heading") {
+        if (bg.heading) {
+          const heading = bg.heading;
+          const headingColor = heading.h1 ?? defaultValue;
+          for (const h of headingKeys) {
+            if (!Object.hasOwn(heading, h)) {
+              Object.defineProperty(heading, h, headingColor);
+            }
+          }
+        } else {
+          bg.heading = {
+            h1: defaultValue,
+            h2: defaultValue,
+            h3: defaultValue,
+            h4: defaultValue,
+            h5: defaultValue,
+            h6: defaultValue,
+          };
+        }
+        continue;
+      }
       if (!bg[key]) {
         bg[key] = defaultValue;
-        continue;
       }
     }
   }
-  return theme;
+  return theme as DeepRequired<Theme>;
 }
 
-const themeFilesDir = join(homedir(), ".config", "remder", "themes");
-const themeFiles = await Array.fromAsync(
-  new Glob("*.yaml").scan({
-    cwd: themeFilesDir,
-    onlyFiles: true,
-    absolute: true,
-  }),
-);
-export const themes: Record<string, Theme> = {
-  "Default Dark": {
-    name: "Default Dark",
+// Make all properties of a type required
+export type DeepRequired<T> = T extends RGBA
+  ? T
+  : T extends object
+  ? {
+    [K in keyof T]-?: DeepRequired<T[K]>;
+  }
+  : T;
+
+export const themes: Record<string, DeepRequired<Theme>> = {
+  Dark: fillDefaults({
+    name: "Dark",
     type: "dark",
     foreground: {
       default: "#fff",
@@ -262,9 +306,9 @@ export const themes: Record<string, Theme> = {
         caution: "#f44",
       },
     },
-  },
-  "Default Light": {
-    name: "Default Light",
+  }),
+  Light: fillDefaults({
+    name: "Light",
     type: "light",
     foreground: {
       default: "#000",
@@ -297,19 +341,33 @@ export const themes: Record<string, Theme> = {
         caution: "#f44",
       },
     },
-  },
+  }),
 };
-for (const theme of themeFiles) {
-  try {
-    const file = await Bun.file(theme).text();
-    const parsedYaml = Bun.YAML.parse(file);
-    isTheme(parsedYaml);
-    const filledDefaults = fillDefaults(parsedYaml);
-    const mergeWith =
-      filledDefaults.type === "dark" ? themes["Default Dark"]! : themes["Default Light"]!;
-    const merged = merge(mergeWith, filledDefaults);
-    Object.defineProperty(themes, merged.name, merged);
-  } catch (e) {
+try {
+  const themeFilesDir = join(homedir(), ".config", "remder", "themes");
+  const themeFiles = await Array.fromAsync(
+    new Glob("*.yaml").scan({
+      cwd: themeFilesDir,
+      onlyFiles: true,
+      absolute: true,
+    }),
+  );
+  for (const theme of themeFiles) {
+    try {
+      const file = await Bun.file(theme).text();
+      const parsedYaml = Bun.YAML.parse(file);
+      isTheme(parsedYaml);
+      const filledDefaults = fillDefaults(parsedYaml);
+      const mergeWith =
+        filledDefaults.type === "dark" ? themes["Default Dark"]! : themes["Default Light"]!;
+      const merged = merge(mergeWith, filledDefaults);
+      themes[merged.name] = merged;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+} catch (e) {
+  if (e instanceof Error && "code" in e && e.code !== "ENOENT") {
     console.error(e);
   }
 }

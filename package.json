@@ -41,7 +41,8 @@
     "terminal-image": "^5.0.1",
     "terminal-link": "^5.0.0",
     "terminal-query": "^0.1.1",
-    "tslog": "^5.4.0"
+    "tslog": "^5.4.0",
+    "zod": "^4.6.7"
   },
   "patchedDependencies": {
     "terminal-image@5.0.1": "patches/terminal-image@5.0.1.patch"

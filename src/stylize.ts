@@ -1,9 +1,18 @@
 import Chalk from "chalk";
 import * as Shiki from "shiki";
 import type { Token } from "markdown-it";
-import { createTextAttributes, RGBA, StyledText, type TextChunk } from "@opentui/core";
+import { createTextAttributes, parseColor, StyledText, type TextChunk } from "@opentui/core";
 import { Logger } from "tslog";
 import Image from "./image-class";
+import { type Theme, type DeepRequired, themes } from "./themes.js";
+import { finalOpts as args } from "./config.js";
+
+const selectedTheme: DeepRequired<Theme> | undefined = themes[args.values.theme];
+if (!selectedTheme) {
+  throw new Error("Error while attempting to use theme");
+}
+
+const theme = selectedTheme;
 
 type BufferedLog = {
   level: "log" | "error";
@@ -308,7 +317,8 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
         tempChunks.push({
           __isChunk: true,
           text: linkTextToken.content,
-          fg: RGBA.fromHex("#8af"),
+          fg: parseColor(theme.foreground.link),
+          bg: parseColor(theme.background.link),
           link: { url: linkUrl },
           attributes: createTextAttributes({ underline: true }),
         });
@@ -356,7 +366,8 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
         tempChunks.push({
           __isChunk: true,
           text: ` ${child.content} `,
-          bg: RGBA.fromHex("#808080"),
+          fg: parseColor(theme.foreground.inlineCode),
+          bg: parseColor(theme.background.inlineCode),
         });
       } else if (type === "emoji") {
         pushText(child.content);
@@ -695,7 +706,6 @@ export default async function stylize(
   filePath: string,
   parentAlignment?: Alignment,
 ): Promise<ProcessedToken[]> {
-  // input is an array returned by `parse()` in `parse - input.js`
   const output = [];
   let index = 0;
 

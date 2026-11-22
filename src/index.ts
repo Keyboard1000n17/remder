@@ -353,7 +353,7 @@ const menu = new SelectRenderable(renderer, {
   id: "menu",
   focusedBackgroundColor: "transparent",
   selectedBackgroundColor: "transparent",
-  selectedTextColor: RGBA.fromHex("#fff"),
+  selectedTextColor: RGBA.fromHex(theme.foreground.default),
   focusedTextColor: RGBA.fromHex("#aaa"),
   textColor: RGBA.fromHex("#aaa"),
 });
@@ -814,6 +814,7 @@ const bottomBarOpts: BoxOptions<BoxRenderable> = {
   id: "bottomBar",
 };
 const bottomBar = new BoxRenderable(renderer, bottomBarOpts);
+console.log(theme.background.bottomBarLeft);
 bottomBar.add(
   Box(
     {

@@ -3,6 +3,7 @@ import { Glob } from "bun";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { merge } from "./merge.js";
+import * as z from "zod";
 
 // These properties are common to Theme.foreground and Theme.background
 type CommonThemeParameters = {
@@ -11,7 +12,6 @@ type CommonThemeParameters = {
   bottomBar?: string;
   bottomBarLeft?: string;
   toc?: string;
-  codeBlockHeader?: string;
   inlineCode?: string;
   heading?: {
     h1?: string;
@@ -23,6 +23,27 @@ type CommonThemeParameters = {
   };
 };
 
+const CommonThemeParametersSchema = z.toZod<CommonThemeParameters>()(
+  z.strictObject({
+    default: z.string(),
+    link: z.string().optional(),
+    bottomBar: z.string().optional(),
+    bottomBarLeft: z.string().optional(),
+    toc: z.string().optional(),
+    inlineCode: z.string().optional(),
+    heading: z
+      .strictObject({
+        h1: z.string().optional(),
+        h2: z.string().optional(),
+        h3: z.string().optional(),
+        h4: z.string().optional(),
+        h5: z.string().optional(),
+        h6: z.string().optional(),
+      })
+      .optional(),
+  }),
+);
+
 type AlertTypes = {
   note?: string;
   tip?: string;
@@ -31,10 +52,20 @@ type AlertTypes = {
   caution?: string;
 };
 
+const AlertTypesSchema = z.toZod<AlertTypes>()(
+  z.strictObject({
+    note: z.string().optional(),
+    tip: z.string().optional(),
+    important: z.string().optional(),
+    warning: z.string().optional(),
+    caution: z.string().optional(),
+  }),
+);
+
 export type Theme = {
   name: string;
   type: "light" | "dark";
-  foreground?: CommonThemeParameters;
+  foreground?: CommonThemeParameters & { codeBlockHeader?: string };
   background?: CommonThemeParameters & { codeBlock?: string };
   alerts?: {
     borderCharacter?: string;
@@ -42,6 +73,36 @@ export type Theme = {
     text?: AlertTypes;
   };
 };
+
+const ThemeSchema = z.toZod<Theme>()(
+  z.strictObject({
+    name: z.string(),
+    type: z.literal(["light", "dark"]),
+    foreground: z
+      .toZod<CommonThemeParameters & { codeBlockHeader?: string }>()(
+        z.strictObject({
+          ...CommonThemeParametersSchema.shape,
+          codeBlockHeader: z.string().optional(),
+        }),
+      )
+      .optional(),
+    background: z
+      .toZod<CommonThemeParameters & { codeBlock?: string }>()(
+        z.strictObject({
+          ...CommonThemeParametersSchema.shape,
+          codeBlock: z.string().optional(),
+        }),
+      )
+      .optional(),
+    alerts: z
+      .strictObject({
+        borderCharacter: z.string().optional(),
+        borderCharacterColor: AlertTypesSchema.optional(),
+        text: AlertTypesSchema.optional(),
+      })
+      .optional(),
+  }),
+);
 
 function validateHeadingEntry(val: unknown): string[] {
   const errors = [];
@@ -79,7 +140,6 @@ function validateCommonThemeParameters(
     "bottomBar",
     "bottomBarLeft",
     "toc",
-    "codeBlockHeader",
     "inlineCode",
     "heading",
     ...(isBg ? (["codeBlock"] as const satisfies (keyof CombinedCommonThemeParameters)[]) : []),
@@ -362,6 +422,7 @@ try {
         filledDefaults.type === "dark" ? themes["Default Dark"]! : themes["Default Light"]!;
       const merged = merge(mergeWith, filledDefaults);
       themes[merged.name] = merged;
+      console.log(JSON.stringify(merged, undefined, 2));
     } catch (e) {
       console.error(e);
     }

@@ -2,8 +2,11 @@ import { RGBA, type ColorInput } from "@opentui/core";
 import { Glob } from "bun";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { merge } from "./merge.js";
 import * as z from "zod";
+
+type Simplify<T> = {
+  [K in keyof T]: T[K];
+} & {};
 
 // These properties are common to Theme.foreground and Theme.background
 type CommonThemeParameters = {
@@ -65,8 +68,8 @@ const AlertTypesSchema = z.toZod<AlertTypes>()(
 export type Theme = {
   name: string;
   type: "light" | "dark";
-  foreground?: CommonThemeParameters & { codeBlockHeader?: string };
-  background?: CommonThemeParameters & { codeBlock?: string };
+  foreground?: Simplify<CommonThemeParameters & { codeBlockHeader?: string }>;
+  background?: Simplify<CommonThemeParameters & { codeBlock?: string }>;
   alerts?: {
     borderCharacter?: string;
     borderCharacterColor?: AlertTypes;
@@ -74,35 +77,114 @@ export type Theme = {
   };
 };
 
-const ThemeSchema = z.toZod<Theme>()(
-  z.strictObject({
-    name: z.string(),
-    type: z.literal(["light", "dark"]),
-    foreground: z
-      .toZod<CommonThemeParameters & { codeBlockHeader?: string }>()(
-        z.strictObject({
-          ...CommonThemeParametersSchema.shape,
-          codeBlockHeader: z.string().optional(),
-        }),
-      )
-      .optional(),
-    background: z
-      .toZod<CommonThemeParameters & { codeBlock?: string }>()(
-        z.strictObject({
-          ...CommonThemeParametersSchema.shape,
-          codeBlock: z.string().optional(),
-        }),
-      )
-      .optional(),
-    alerts: z
-      .strictObject({
-        borderCharacter: z.string().optional(),
-        borderCharacterColor: AlertTypesSchema.optional(),
-        text: AlertTypesSchema.optional(),
-      })
-      .optional(),
-  }),
-);
+const ThemeSchema = z
+  .toZod<Theme>()(
+    z.strictObject({
+      name: z.string(),
+      type: z.literal(["light", "dark"]),
+      foreground: z
+        .toZod<Simplify<CommonThemeParameters & { codeBlockHeader?: string }>>()(
+          z.strictObject({
+            ...CommonThemeParametersSchema.shape,
+            codeBlockHeader: z.string().optional(),
+          }),
+        )
+        .optional(),
+      background: z
+        .toZod<Simplify<CommonThemeParameters & { codeBlock?: string }>>()(
+          z.strictObject({
+            ...CommonThemeParametersSchema.shape,
+            codeBlock: z.string().optional(),
+          }),
+        )
+        .optional(),
+      alerts: z
+        .strictObject({
+          borderCharacter: z.string().optional(),
+          borderCharacterColor: AlertTypesSchema.optional(),
+          text: AlertTypesSchema.optional(),
+        })
+        .optional(),
+    }),
+  )
+  .transform((config) => {
+    const defaultTheme = config.type === "dark" ? themes["Dark"]! : themes["Light"]!;
+    const configFg = config.foreground;
+    const defaultFg = defaultTheme.foreground;
+    const configBg = config.background;
+    const defaultBg = defaultTheme.background;
+    const configAlerts = config.alerts;
+    const defaultAlerts = defaultTheme.alerts;
+    return {
+      ...defaultTheme,
+      ...config,
+      name: config.name,
+      type: config.type,
+      foreground: {
+        default: configFg?.default ?? defaultFg.default,
+        link: configFg?.link ?? defaultFg.link,
+        bottomBar: configFg?.bottomBar ?? defaultFg.bottomBar,
+        bottomBarLeft: configFg?.bottomBarLeft ?? defaultFg.bottomBarLeft,
+        toc: configFg?.toc ?? defaultFg.toc,
+        inlineCode: configFg?.toc ?? defaultFg.toc,
+        codeBlockHeader: configFg?.codeBlockHeader ?? defaultFg.codeBlockHeader,
+        heading: {
+          h1: configFg?.heading?.h1 ?? defaultFg.heading.h1,
+          h2: configFg?.heading?.h2 ?? defaultFg.heading.h2,
+          h3: configFg?.heading?.h3 ?? defaultFg.heading.h3,
+          h4: configFg?.heading?.h4 ?? defaultFg.heading.h4,
+          h5: configFg?.heading?.h5 ?? defaultFg.heading.h5,
+          h6: configFg?.heading?.h6 ?? defaultFg.heading.h6,
+        },
+      },
+      background: {
+        default: configBg?.default ?? defaultBg.default,
+        link: configBg?.link ?? defaultBg.link,
+        bottomBar: configBg?.bottomBar ?? defaultBg.bottomBar,
+        bottomBarLeft: configBg?.bottomBarLeft ?? defaultBg.bottomBarLeft,
+        toc: configBg?.toc ?? defaultBg.toc,
+        inlineCode: configBg?.toc ?? defaultBg.toc,
+        codeBlock: configBg?.codeBlock ?? defaultBg.codeBlock,
+        heading: {
+          h1: configBg?.heading?.h1 ?? defaultBg.heading.h1,
+          h2: configBg?.heading?.h2 ?? defaultBg.heading.h2,
+          h3: configBg?.heading?.h3 ?? defaultBg.heading.h3,
+          h4: configBg?.heading?.h4 ?? defaultBg.heading.h4,
+          h5: configBg?.heading?.h5 ?? defaultBg.heading.h5,
+          h6: configBg?.heading?.h6 ?? defaultBg.heading.h6,
+        },
+      },
+      alerts: {
+        borderCharacter: configAlerts?.borderCharacter ?? defaultAlerts.borderCharacter,
+        borderCharacterColor: {
+          note: configAlerts?.borderCharacterColor?.note ?? defaultAlerts.borderCharacterColor.note,
+          tip: configAlerts?.borderCharacterColor?.tip ?? defaultAlerts.borderCharacterColor.tip,
+          important:
+            configAlerts?.borderCharacterColor?.important
+            ?? defaultAlerts.borderCharacterColor.important,
+          warning:
+            configAlerts?.borderCharacterColor?.warning
+            ?? defaultAlerts.borderCharacterColor.warning,
+          caution:
+            configAlerts?.borderCharacterColor?.caution
+            ?? defaultAlerts.borderCharacterColor.caution,
+        },
+        text: {
+          note: configAlerts?.borderCharacterColor?.note ?? defaultAlerts.borderCharacterColor.note,
+          tip: configAlerts?.borderCharacterColor?.tip ?? defaultAlerts.borderCharacterColor.tip,
+          important:
+            configAlerts?.borderCharacterColor?.important
+            ?? defaultAlerts.borderCharacterColor.important,
+          warning:
+            configAlerts?.borderCharacterColor?.warning
+            ?? defaultAlerts.borderCharacterColor.warning,
+          caution:
+            configAlerts?.borderCharacterColor?.caution
+            ?? defaultAlerts.borderCharacterColor.caution,
+        },
+      },
+    };
+  });
 
 function validateHeadingEntry(val: unknown): string[] {
   const errors = [];
@@ -251,7 +333,6 @@ function fillDefaults(theme: Theme, fallback?: ColorInput): DeepRequired<Theme> 
     "bottomBar",
     "bottomBarLeft",
     "toc",
-    "codeBlockHeader",
     "inlineCode",
     "heading",
   ] as const satisfies (keyof CommonThemeParameters)[];
@@ -416,13 +497,8 @@ try {
     try {
       const file = await Bun.file(theme).text();
       const parsedYaml = Bun.YAML.parse(file);
-      isTheme(parsedYaml);
-      const filledDefaults = fillDefaults(parsedYaml);
-      const mergeWith =
-        filledDefaults.type === "dark" ? themes["Default Dark"]! : themes["Default Light"]!;
-      const merged = merge(mergeWith, filledDefaults);
-      themes[merged.name] = merged;
-      console.log(JSON.stringify(merged, undefined, 2));
+      const parsedTheme = ThemeSchema.parse(parsedYaml);
+      themes[parsedTheme.name] = parsedTheme;
     } catch (e) {
       console.error(e);
     }

@@ -9,7 +9,9 @@ import { finalOpts as args } from "./config.js";
 
 const selectedTheme: DeepRequired<Theme> | undefined = themes[args.values.theme];
 if (!selectedTheme) {
-  throw new Error("Error while attempting to use theme");
+  throw new Error(
+    `Error while attempting to use theme "${args.values.theme}. Did you misspell the theme name?"`,
+  );
 }
 
 const theme = selectedTheme;
@@ -369,6 +371,7 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
           fg: parseColor(theme.foreground.inlineCode),
           bg: parseColor(theme.background.inlineCode),
         });
+        console.log(theme.background.inlineCode);
       } else if (type === "emoji") {
         pushText(child.content);
       } else if (type === "text") {

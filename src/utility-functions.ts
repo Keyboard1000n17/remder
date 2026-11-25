@@ -17,6 +17,17 @@ import chalk from "chalk";
 import type { FontName } from "figlet";
 import { type ProcessedToken } from "./stylize";
 import { createColorPalette, parseAnsiSequences } from "ansi-sequence-parser";
+import { finalOpts as args } from "./config.js";
+import { type DeepRequired, type Theme, themes } from "./themes.js";
+
+const selectedTheme: DeepRequired<Theme> | undefined = themes[args.values.theme];
+if (!selectedTheme) {
+  throw new Error(
+    `Error while attempting to use theme "${args.values.theme}. Did you misspell the theme name?"`,
+  );
+}
+
+const theme = selectedTheme;
 
 /* self-explanatory function. it just aligns text in the terminal. this is used
  * for the --print-to-stdout option, not the interactive mode.
@@ -168,7 +179,8 @@ export function makeTaskList(item: ProcessedToken) {
               chunks.unshift({
                 __isChunk: true,
                 text: startsWith?.[0].trim().toLowerCase() === "[x]" ? " \uf00c " : "   ",
-                bg: RGBA.fromHex("#808080"),
+                fg: RGBA.fromHex(theme.foreground.tasklist),
+                bg: RGBA.fromHex(theme.background.tasklist),
               });
             }
             content.push({

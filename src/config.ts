@@ -71,7 +71,7 @@ const filterOutUndefinedArgs: {
   ...Object.fromEntries(Object.entries(args.values).filter(([_, v]) => v !== undefined)),
   help: args.values.help, // This line is unnecessary, but TypeScript thinks otherwise
 };
-export const finalOpts: {
+const opts: {
   positionals: string[];
   values: {
     debug: boolean;
@@ -117,13 +117,13 @@ try {
     throw new Error(`Invalid config: ${errorList.join(", ")}`);
   }
   // Merge the parsed config
-  finalOpts.values = {
+  opts.values = {
     ...defaultArgs,
     ...parsedConfig,
     ...filterOutUndefinedArgs,
   };
 } catch (err) {
-  finalOpts.values = {
+  opts.values = {
     ...defaultArgs,
     ...filterOutUndefinedArgs,
   };
@@ -131,3 +131,5 @@ try {
     console.error(err);
   }
 }
+
+export const finalOpts = opts;

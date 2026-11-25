@@ -227,7 +227,7 @@ import { feature } from "bun:bundle";
 
 const theme = themes[args.values.theme];
 if (!theme) {
-  throw new Error("Error while attempting to use theme");
+  throw new Error(`Error while attempting to use theme "${args.values.theme}"`);
 }
 
 let headingIndexForToc = 0;
@@ -825,6 +825,7 @@ bottomBar.add(
     },
     Text({
       content: "remder",
+      fg: parseColor(theme.foreground.bottomBarLeft),
       attributes: createTextAttributes({ bold: true }),
     }),
   ),

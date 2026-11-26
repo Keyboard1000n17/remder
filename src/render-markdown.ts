@@ -13,7 +13,7 @@ import {
   parseColor,
 } from "@opentui/core";
 import chalk from "chalk";
-import type { ProcessedToken, HeadingObject } from "./stylize";
+import type { ProcessedToken, HeadingObject } from "./stylize.js";
 import { finalOpts as args } from "./config.js";
 import { themes, type DeepRequired, type Theme } from "./themes.js";
 import {
@@ -29,6 +29,7 @@ if (!selectedTheme) {
 }
 
 const theme = selectedTheme;
+const defaultTextColor = theme.foreground.default;
 
 const headingIndexes = [0, 0, 0, 0, 0, 0];
 export const headingsArrayForToc: {
@@ -191,6 +192,7 @@ export async function renderMarkdown(
             content,
             alignSelf: token.properties.align ?? "left",
             textAlign: token.properties.align ?? "left",
+            fg: defaultTextColor,
           }),
         );
         console.log(`textAlign: ${token.properties.align ?? "left"}`);
@@ -360,7 +362,7 @@ export async function renderMarkdown(
                   flexDirection: "row",
                   gap: 1,
                 },
-                Text({ content: index === 0 ? bp : " " }),
+                Text({ content: index === 0 ? bp : " ", fg: defaultTextColor }),
                 Box({}, listRenderable),
               ),
             );
@@ -398,6 +400,7 @@ export async function renderMarkdown(
                 },
                 Text({
                   content: index === 0 ? `${String(number).padStart(markerWidth)}.` : " ",
+                  fg: defaultTextColor,
                 }),
                 Box({}, listRenderable),
               ),
@@ -577,11 +580,13 @@ export async function renderMarkdown(
           content: "⏷",
           visible: isOpen ? true : false,
           id: `closed-indicator-${detailsId}`,
+          fg: defaultTextColor,
         });
         const closedIndicator = Text({
           content: "⏵",
           visible: isOpen ? false : true,
           id: `open-indicator-${detailsId}`,
+          fg: defaultTextColor,
         });
         const indicators = Box(
           { id: `indicators-details-${detailsId}` },

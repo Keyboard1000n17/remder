@@ -356,6 +356,7 @@ const menu = new SelectRenderable(renderer, {
   selectedTextColor: RGBA.fromHex(theme.foreground.default),
   focusedTextColor: RGBA.fromHex("#aaa"),
   textColor: RGBA.fromHex("#aaa"),
+  marginBottom: 1,
 });
 (async () => {
   for await (const file of glob("**/*.md", {})) {

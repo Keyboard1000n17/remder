@@ -125,17 +125,15 @@ export async function makeFigletFont(
     6: "Calvin S Modified",
   };
   if (ctx) {
-    const textRenderables = text.split("").map(
-      (char) =>
-        new TextRenderable(ctx, {
-          content: figlet
-            .textSync(char, {
-              font: fontsList[level],
-            })
-            .replace(/^[^\S\r\n]*\r?\n/, "")
-            .replace(/[^\S\r\n]*\r?\n$/, ""),
-        }),
-    );
+    const textRenderables = text.split("").map((char) => {
+      const text = figlet.textSync(char, {
+        font: fontsList[level],
+      });
+      return new TextRenderable(ctx, {
+        fg: theme.foreground.default,
+        content: level === 1 ? text.trimEnd() : text,
+      });
+    });
     const box = new BoxRenderable(ctx, {
       flexDirection: "row",
       flexWrap: "wrap",

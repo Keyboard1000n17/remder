@@ -303,6 +303,7 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
         __isChunk: true,
         text: content,
         attributes: attrs,
+        fg: parseColor(theme.foreground.default),
       });
     };
     for (let i = 0; i < token.children.length; i++) {
@@ -371,7 +372,6 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
           fg: parseColor(theme.foreground.inlineCode),
           bg: parseColor(theme.background.inlineCode),
         });
-        console.log(theme.background.inlineCode);
       } else if (type === "emoji") {
         pushText(child.content);
       } else if (type === "text") {
@@ -385,6 +385,7 @@ async function renderInline(token: Token, filePath?: string, parentAlignment?: A
   if (tempChunks.length > 0) {
     styled.push({
       type: "text",
+      // This uses the spread operator to create a shallow clone because flushing this array makes content = []
       content: new StyledText([...tempChunks]),
       properties: textAlignment ? { textAlign: textAlignment } : {},
     });

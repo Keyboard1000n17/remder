@@ -12,6 +12,7 @@ import {
   TextRenderable,
   createTextAttributes,
   BoxRenderable,
+  parseColor,
 } from "@opentui/core";
 import chalk from "chalk";
 import type { FontName } from "figlet";
@@ -150,6 +151,7 @@ export async function makeFigletFont(
         width: parseInt(termWidth),
         whitespaceBreak: true,
       })
+      .trimEnd()
       .split(/\r?\n\r?\n/)
       .map((line) => alignText(line, align, termWidth))
       .join("\n\n");
@@ -274,4 +276,21 @@ export function ansiToTextToken(text: string, ctx: RenderContext, id?: string) {
     wrapMode: "word",
   });
   return textToken;
+}
+
+/*
+ * This function returns a ChalkInstance that will color a string using the specified foreground
+ * and background colors by parsing those colors using OpenTUI's parseColor, and using chalk.rgb
+ * and chalk.bgRgb to color the string.
+ * */
+export function colorStringsToChalkInstance(fg: string, bg: string) {
+  const parsedColorFg = parseColor(fg);
+  return (str: string) => {
+    let instance = chalk.rgb(parsedColorFg.r, parsedColorFg.g, parsedColorFg.b);
+    if (bg !== "transparent") {
+      const parsedColorBg = parseColor(bg);
+      instance = instance.bgRgb(parsedColorBg.r, parsedColorBg.g, parsedColorBg.b);
+    }
+    return instance(str);
+  };
 }

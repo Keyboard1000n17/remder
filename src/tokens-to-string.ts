@@ -1,6 +1,24 @@
 import { type HeadingObject, type ProcessedToken } from "./stylize";
-import { chunksToAnsi, makeTaskList, alignText, makeFigletFont } from "./utility-functions";
+import {
+  chunksToAnsi,
+  makeTaskList,
+  alignText,
+  makeFigletFont,
+  colorStringsToChalkInstance,
+} from "./utility-functions";
 import type Image from "./image-class";
+import { themes, type DeepRequired, type Theme } from "./themes.js";
+import { finalOpts as args } from "./config.js";
+import { parseColor } from "@opentui/core";
+
+const selectedTheme: DeepRequired<Theme> | undefined = themes[args.values.theme];
+if (!selectedTheme) {
+  throw new Error(
+    `Error while attempting to use theme "${args.values.theme}. Did you misspell the theme name?"`,
+  );
+}
+
+const theme = selectedTheme;
 
 export default async function tokensToString(
   tokens: ProcessedToken[],
@@ -141,13 +159,15 @@ export default async function tokensToString(
       case "heading":
         const tokenContent: HeadingObject = token.content as HeadingObject;
         if (noRenderHeadings) {
+          const headingFg = theme.foreground.heading;
+          const headingBg = theme.background.heading;
           const colorMap: Record<number, (str: string) => string> = {
-            1: (str: string) => chalk.hex("#ffa50a")(str),
-            2: (str: string) => chalk.hex("#eeee00")(str),
-            3: (str: string) => chalk.hex("#0acadd")(str),
-            4: (str: string) => chalk.hex("#ffa5a5")(str),
-            5: (str: string) => chalk.hex("#22ff22")(str),
-            6: (str: string) => chalk.hex("#aaaaaa")(str),
+            1: (str: string) => colorStringsToChalkInstance(headingFg.h1, headingBg.h1)(str),
+            2: (str: string) => colorStringsToChalkInstance(headingFg.h2, headingBg.h2)(str),
+            3: (str: string) => colorStringsToChalkInstance(headingFg.h3, headingBg.h3)(str),
+            4: (str: string) => colorStringsToChalkInstance(headingFg.h4, headingBg.h4)(str),
+            5: (str: string) => colorStringsToChalkInstance(headingFg.h5, headingBg.h5)(str),
+            6: (str: string) => colorStringsToChalkInstance(headingFg.h6, headingBg.h6)(str),
           };
           const str = colorMap[tokenContent.level]!(
             "#".repeat(tokenContent.level) + " " + tokenContent.text,
@@ -290,7 +310,7 @@ export default async function tokensToString(
         break;
       //#endregion
       //#region blockquote
-      case "blockquote":
+      case "blockquote": {
         const uhb = "\u258c"; // unicode left half block
         const blockquoteItems = [];
         const renderedBlockquoteChildren = await tokensToString(
@@ -309,15 +329,56 @@ export default async function tokensToString(
             .join("\n"),
         );
         break;
+      }
       //#endregion
       //#region alerts
       case "alert": {
-        const alertIcons: Record<string, { icon: string; color: string; name: string }> = {
-          note: { icon: "\uf129", color: "#6af", name: "Note" },
-          tip: { icon: "\uf400", color: "#3b4", name: "Tip" },
-          important: { icon: "\uf12a", color: "#96f", name: "Important" },
-          warning: { icon: "\uea6c", color: "#dd4", name: "Warning" },
-          caution: { icon: "\u{f0ce6}", color: "#f44", name: "Caution" },
+        const borderCharacter = theme.alerts.borderCharacter;
+        const alertConfig = theme.alerts;
+        const alertIcons: Record<
+          string,
+          { icon: string; color: { border: string; text: string }; name: string }
+        > = {
+          note: {
+            icon: "\uf129",
+            color: {
+              border: alertConfig.borderCharacterColor.note,
+              text: alertConfig.text.note,
+            },
+            name: "Note",
+          },
+          tip: {
+            icon: "\uf400",
+            color: {
+              border: alertConfig.borderCharacterColor.tip,
+              text: alertConfig.text.tip,
+            },
+            name: "Tip",
+          },
+          important: {
+            icon: "\uf12a",
+            color: {
+              border: alertConfig.borderCharacterColor.important,
+              text: alertConfig.text.important,
+            },
+            name: "Important",
+          },
+          warning: {
+            icon: "\uea6c",
+            color: {
+              border: alertConfig.borderCharacterColor.warning,
+              text: alertConfig.text.warning,
+            },
+            name: "Warning",
+          },
+          caution: {
+            icon: "\u{f0ce6}",
+            color: {
+              border: alertConfig.borderCharacterColor.caution,
+              text: alertConfig.text.caution,
+            },
+            name: "Caution",
+          },
         };
         const alertType = token.properties.alertType;
         const alertIconAndColor = alertIcons[alertType];
@@ -330,10 +391,10 @@ export default async function tokensToString(
           indent,
           parentAlignment,
         );
-        const uhb = chalk.hex(alertIconAndColor!.color)("\u258c"); // unicode left half block
+        const uhb = chalk.hex(alertIconAndColor!.color.border)(borderCharacter);
         contentStrings.push(
           uhb
-          + chalk.hex(alertIconAndColor!.color)(
+          + chalk.hex(alertIconAndColor!.color.text)(
             ` ${alertIconAndColor!.icon} ${alertIconAndColor!.name}`,
           )
           + `\n${uhb}\n`
@@ -362,12 +423,18 @@ export default async function tokensToString(
         const code = codeTokenContent.code
           .trim()
           .split("\n")
-          .map(
-            (line) => "  " + line + " ".repeat(boxWidth - Math.max(Bun.stringWidth(line), 0) - 2),
+          .map((line) =>
+            Bun.wrapAnsi(line, boxWidth - 2)
+              .split("\n")
+              .map((line) => "  " + line + " ".repeat(boxWidth - Bun.stringWidth(line) - 2))
+              .join("\n"),
           )
           .join("\n");
+        const rgbaInstance = parseColor(theme.background.codeBlock);
+        const [r, g, b] = rgbaInstance.toInts();
+        const chalkInstance = chalk.bgRgb(r, g, b);
         contentStrings.push(
-          chalk.bgHex("#222")(
+          chalkInstance(
             [
               emptyLine,
               `${languageLine}${" ".repeat(boxWidth - Bun.stringWidth(languageLine))}`,
@@ -426,7 +493,12 @@ export default async function tokensToString(
       //#endregion
       //#region horizontal rule
       case "thematic-break":
-        contentStrings.push("─".repeat(Number(termWidth) - 2));
+        contentStrings.push(
+          colorStringsToChalkInstance(
+            theme.foreground.default,
+            "transparent",
+          )("─".repeat(parseInt(termWidth) - 2)),
+        );
         break;
       //#region default
       default:

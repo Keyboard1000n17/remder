@@ -206,6 +206,7 @@ import {
   InputRenderable,
   InputRenderableEvents,
   parseColor,
+  TextAttributes,
 } from "@opentui/core";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import fuzzysort from "fuzzysort";
@@ -966,9 +967,9 @@ const tocMenu = new SelectRenderable(renderer, {
   padding: 1,
   width: 40,
   id: "toc-scrollbox",
-  focusedBackgroundColor: RGBA.fromInts(8, 153, 22, 0.2),
-  textColor: RGBA.fromInts(208, 208, 208),
-  focusedTextColor: RGBA.fromInts(208, 208, 208),
+  focusedBackgroundColor: theme.background.toc,
+  textColor: theme.foreground.toc,
+  focusedTextColor: theme.foreground.toc,
   selectedTextColor: "white",
   showSelectionIndicator: false,
   options: tocMenuChildren,
@@ -984,12 +985,26 @@ const tocBox = new BoxRenderable(renderer, {
   width: 40,
   flexShrink: 0,
   title: "Table of Contents",
-  border: true,
+  border: ["left", "bottom", "right"],
   borderColor: "transparent",
   titleColor: "white",
   titleAlignment: "center",
   marginTop: 1,
 });
+tocBox.add(
+  new TextRenderable(renderer, {
+    marginBottom: 1,
+    textAlign: "center",
+    content: new StyledText([
+      {
+        __isChunk: true,
+        text: "Table of Contents",
+        fg: parseColor(theme.foreground.default),
+        attributes: TextAttributes.BOLD,
+      },
+    ]),
+  }),
+);
 tocBox.add(tocMenu);
 root.add(tocBox);
 //#endregion
